@@ -25,9 +25,16 @@ targets:
     platform: iOS
     sources:
       - Not3
+      - Shared
+      # Widget views are also compiled into the app for the DEBUG widget gallery and so
+      # interactive intents exist in both processes.
+      - path: Not3Widgets
+        excludes: [Not3WidgetBundle.swift, Info.plist, "*.entitlements"]
     dependencies:
       - package: Supabase
         product: Supabase
+      - target: Not3Widgets
+        embed: true
     entitlements:
       path: Not3/Resources/Not3.entitlements
       properties:
@@ -35,6 +42,7 @@ targets:
         com.apple.developer.applesignin: [Default]
         com.apple.developer.icloud-container-identifiers: [iCloud.com.tuandiep.not3]
         com.apple.developer.icloud-services: [CloudKit]
+        com.apple.security.application-groups: [group.com.tuandiep.not3]
     info:
       path: Not3/Resources/Info.plist
       properties:
@@ -52,7 +60,11 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        UIBackgroundModes: [remote-notification]
+        UIBackgroundModes: [remote-notification, fetch]
+        BGTaskSchedulerPermittedIdentifiers: [com.tuandiep.not3.refresh]
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tuandiep.not3
+            CFBundleURLSchemes: [not3]
         NSCalendarsFullAccessUsageDescription: Not3 đọc lịch hôm nay để gợi ý việc buổi sáng lúc check-in, và ghi kế hoạch buổi chiều vào lịch "Not3".
         NSMicrophoneUsageDescription: Not3 dùng micro để bạn nói việc cần làm thay vì gõ.
         NSSpeechRecognitionUsageDescription: Not3 chuyển giọng nói thành chip việc cần làm, xử lý trên máy khi có thể.
@@ -64,6 +76,30 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"
+  Not3Widgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Not3Widgets
+      - Shared
+      - path: Not3/Resources/Assets.xcassets
+        buildPhase: resources
+    entitlements:
+      path: Not3Widgets/Not3Widgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.tuandiep.not3]
+    info:
+      path: Not3Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: Not3
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tuandiep.not3.widgets
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) WIDGET_EXTENSION"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
   Not3Tests:
     type: bundle.unit-test
     platform: iOS

@@ -20,11 +20,19 @@ struct Not3App: App {
                 .environment(CalendarService.shared)
                 .tint(Theme.accentInk)
                 .task { await AppLifecycle.onLaunch() }
+                .onOpenURL { Router.shared.open($0) }
         }
         .modelContainer(Persistence.shared)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active {
+            switch phase {
+            case .active:
                 Task { await AppLifecycle.onForeground() }
+            case .background:
+                // Widgets show the latest state; iOS wakes us later to refresh.
+                WidgetBridge.publish()
+                BackgroundRefresh.schedule()
+            default:
+                break
             }
         }
     }
@@ -37,6 +45,7 @@ enum AppLifecycle {
         Persistence.seedIfNeeded(context)
         Persistence.mergeDuplicateFolders(context)
         CalendarService.shared.startObserving()
+        WidgetBridge.startObserving()
         NotificationService.registerCategories()
         // Permission is asked in context (first check-in save), not on first launch.
         UIApplication.shared.registerForRemoteNotifications()
@@ -54,6 +63,8 @@ enum AppLifecycle {
     static func onForeground() async {
         let context = Persistence.shared.mainContext
         let supabase = SupabaseService.shared
+        // Ticks / moods / starts done on widgets while the app was closed.
+        await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
         await CalendarService.shared.refresh(in: context)
         await supabase.syncPending(context)
@@ -65,6 +76,25 @@ enum AppLifecycle {
         await supabase.pullNoteSuggestions(context)
         JournalService.updateToday(in: context)
         supabase.markRefreshed()
+        WidgetBridge.publish()
+    }
+
+    /// BGAppRefreshTask and silent pushes: same data pass, no UI work, then the widgets.
+    static func backgroundRefresh() async {
+        let context = Persistence.shared.mainContext
+        let supabase = SupabaseService.shared
+        if !supabase.isSignedIn { await supabase.restoreSession() }
+        await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
+        await CalendarService.shared.refresh(in: context)
+        await supabase.syncPending(context)
+        await supabase.uploadCalendarItems(context)
+        await supabase.pullContentRules()
+        await supabase.pullExternalItems(context)
+        await supabase.pullTaskUpdates(context)
+        await supabase.pullLinks(context)
+        JournalService.updateToday(in: context)
+        supabase.markRefreshed()
+        WidgetBridge.publish()
     }
 
     #if DEBUG
@@ -108,7 +138,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        BackgroundRefresh.register()
         return true
+    }
+
+    /// Silent push (`content-available`) from the server after GitHub / Jira changed something:
+    /// refresh data and widgets in the background.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any]
+    ) async -> UIBackgroundFetchResult {
+        await AppLifecycle.backgroundRefresh()
+        return .newData
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

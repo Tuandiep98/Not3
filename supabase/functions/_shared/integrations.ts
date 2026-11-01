@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { classifyAndApply } from "./classify.ts";
 import { linkAndSync } from "./links.ts";
+import { queueSilentRefresh } from "./push.ts";
 import {
   type DoneRules,
   doneRules,
@@ -1291,9 +1292,11 @@ export async function syncUser(
   }
   // Link tasks to what was just pulled and apply external status (PR merged → task done).
   try {
-    await linkAndSync(db, userId);
+    const changed = await linkAndSync(db, userId);
     // Then classify what is left: tasks / journal / ignored / "chưa phân loại".
-    await classifyAndApply(db, userId);
+    const created = await classifyAndApply(db, userId);
+    // Tasks changed on the server → wake the app to refresh its data and widgets.
+    if (changed.length > 0 || created > 0) await queueSilentRefresh(db, userId);
   } catch (e) {
     console.error("[sync] link / classify", e);
   }

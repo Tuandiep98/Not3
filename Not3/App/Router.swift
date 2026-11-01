@@ -23,4 +23,42 @@ final class Router {
         if path.last != .today { path = [.today] }
         isCheckInPresented = true
     }
+
+    /// not3:// links from widgets. (not3://oauth is consumed by ASWebAuthenticationSession.)
+    func open(_ url: URL) {
+        guard url.scheme == "not3" else { return }
+        let context = Persistence.shared.mainContext
+        let id = url.pathComponents.dropFirst().first.flatMap(UUID.init(uuidString:))
+        isCheckInPresented = false
+        switch url.host() {
+        case "today":
+            path = [.today]
+        case "checkin":
+            openCheckIn()
+        case "summary":
+            path = [.summary]
+        case "folder":
+            if let id, id != WidgetSnapshot.allNotesID,
+               let folder = try? context.fetch(FetchDescriptor<Folder>(predicate: #Predicate { $0.id == id })).first {
+                path = [.folder(folder.persistentModelID)]
+            } else {
+                path = [.allNotes]
+            }
+        case "note":
+            if let id, let note = try? context.fetch(FetchDescriptor<Note>(predicate: #Predicate { $0.id == id })).first {
+                path = [.allNotes, .note(note.persistentModelID)]
+            }
+        case "new-note":
+            let folderId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first { $0.name == "folder" }?.value.flatMap(UUID.init(uuidString:))
+            let folder = folderId.flatMap { fid in
+                try? context.fetch(FetchDescriptor<Folder>(predicate: #Predicate { $0.id == fid })).first
+            }
+            let note = Note(folder: folder)
+            context.insert(note)
+            path = [folder.map { .folder($0.persistentModelID) } ?? .allNotes, .note(note.persistentModelID)]
+        default:
+            break
+        }
+    }
 }

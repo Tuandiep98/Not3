@@ -5,6 +5,19 @@ struct RootView: View {
     @Environment(Router.self) private var router
 
     var body: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-widgetGallery") {
+            WidgetGalleryView()
+        } else {
+            main
+        }
+        #else
+        main
+        #endif
+    }
+
+    @ViewBuilder
+    private var main: some View {
         @Bindable var router = router
         NavigationStack(path: $router.path) {
             FolderListView()

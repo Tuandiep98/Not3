@@ -389,7 +389,7 @@ Chỉ riêng giai đoạn 1 đã đủ để dùng hằng ngày. AI bắt đầu
 
 **Còn mở**
 
-- [ ] Gửi API key DeepSeek (lưu thành secret Supabase, không đưa vào app)
+- [x] Gửi API key DeepSeek (lưu thành secret Supabase, không đưa vào app)
 - [ ] Kiếm tiền: miễn phí + gói Pro (tích hợp, tổng kết AI), hay trả một lần?
 
 ---
@@ -547,5 +547,15 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [ ] Atlassian Personal Data Reporting API (bắt buộc khi app Jira ở chế độ Sharing và lưu accountId)
 - [ ] GitHub: Projects v2, Discussions, cảnh báo bảo mật, tổng đóng góp (GraphQL / quyền riêng)
 - [ ] Thẻ nội dung hợp nhất `build-cards` (gộp PR ↔ ticket cùng việc, tóm tắt AI 2 dòng)
+
+**Giai đoạn 4 — Widget** (đang làm)
+
+- [x] Widget extension `Not3Widgets` (WidgetKit, iOS 18+): **Check-in** (vừa + màn hình khoá; đổi theo giờ: sáng nay → "Sáng nay thế nào?" với 3 nút → câu nếu–thì + "Bắt đầu"), **Việc hôm nay** (nhỏ / vừa / lớn, tích ngay trên widget, logo GitHub / Jira, "↺ Bị trả lại"), **Tuần này** (nhỏ + vòng màn hình khoá), **Thư mục ghi chú** (chọn thư mục khi sửa widget)
+- [x] Dữ liệu: app ghi ảnh chụp JSON vào App Group `group.com.tuandiep.not3` (`Shared/WidgetSnapshot.swift`); widget chỉ đọc. Thao tác trên widget → cập nhật ảnh chụp + xếp hàng (`widget-actions/`), app áp vào SwiftData và đồng bộ ở lần chạy sau
+- [x] Tự cập nhật: sau mọi lần lưu SwiftData (debounce), khi vào nền, BGAppRefreshTask (~30 phút) và silent push từ server khi GitHub / Jira đổi task (`_shared/push.ts`, tối đa 1 lần / 10 phút)
+- [x] Deep link `not3://today | checkin | summary | folder/<id> | note/<id> | new-note`
+- [x] DEBUG: `-widgetGallery` (`-widgetGallery2`) vẽ mọi trạng thái widget trên simulator
+- [ ] Live Activity đếm ngược phiên (nút "Bắt đầu" hiện chỉ chuyển việc sang Đang làm)
+- [ ] App Intents / Siri, Control Center
 
 Những mục cần bạn cung cấp hoặc quyết định nằm trong [`CAN_BO_SUNG.md`](CAN_BO_SUNG.md).

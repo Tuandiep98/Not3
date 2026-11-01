@@ -275,7 +275,7 @@ Máy hiện chỉ có runtime iOS 27.
 Trên iPhone thật: sheet Check-in → chip **Nói** → nói "lúc 3 giờ chiều học tiếng Anh 25 phút" → **Xong**.
 Mong đợi: chip "Học tiếng Anh" được chọn, giờ 15:00, 25 phút. Nếu máy chưa có tiếng Việt cho nhận dạng: **Cài đặt → Chung → Bàn phím → Đọc chính tả**, thêm Tiếng Việt.
 
-### - [ ] E3. CI GitHub Actions
+### - [x] E3. CI GitHub Actions
 
 Workflow `.github/workflows/ios.yml` chưa chạy lần nào. Sau khi commit + push:
 
@@ -403,6 +403,17 @@ Build lại app lên máy (bản mới có quyền iCloud + Lịch), rồi:
 | Thư mục **Nhật ký** | Note "Nhật ký d/m" có Sáng / Chiều; tự gõ thêm ngoài khối "— Tự động —" thì vẫn giữ sau lần cập nhật sau |
 
 Lần đầu mở bản mới, dữ liệu cũ được chuyển sang kho mới một lần (file cũ giữ lại thành `default.store.migrated`). Nếu thấy thiếu note / task sau khi cập nhật: báo ngay, đừng xoá app.
+
+## H. Widget
+
+### - [ ] H1. Thêm widget trên iPhone
+
+Nhấn giữ màn hình chính → **Sửa** → **Thêm tiện ích** → tìm **Not3** → chọn:
+**Check-in** (vừa), **Việc hôm nay** (nhỏ / vừa / lớn), **Tuần này** (nhỏ), **Thư mục ghi chú** (vừa — nhấn giữ widget → *Sửa tiện ích* để chọn thư mục).
+Màn hình khoá: nhấn giữ → **Tuỳ chỉnh** → Màn hình khoá → thêm **Check-in** (chữ nhật / dòng) và **Tuần này** (tròn).
+
+Thử: tích một việc trên widget → mở app, việc đã xong; chọn cảm nhận trên widget lúc check-in → app ghi nhận; merge PR liên kết → widget tự cập nhật (silent push, có thể trễ vài phút; iOS tự điều tiết).
+Nếu widget trống: mở app một lần để app ghi dữ liệu cho widget.
 
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 

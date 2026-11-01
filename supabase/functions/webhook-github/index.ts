@@ -4,6 +4,7 @@ import { adminClient, json } from "../_shared/admin.ts";
 import { githubItem, type GithubSearchItem } from "../_shared/integrations.ts";
 import { classifyAndApply } from "../_shared/classify.ts";
 import { linkAndSync } from "../_shared/links.ts";
+import { queueSilentRefresh } from "../_shared/push.ts";
 import { doneRules } from "../_shared/settings.ts";
 import { verifySignature } from "./signature.ts";
 
@@ -85,8 +86,11 @@ Deno.serve(async (req) => {
         },
         { onConflict: "user_id,source,external_id" },
       );
-      await linkAndSync(db, u.user_id);
-      await classifyAndApply(db, u.user_id);
+      const changed = await linkAndSync(db, u.user_id);
+      const created = await classifyAndApply(db, u.user_id);
+      if (changed.length > 0 || created > 0) {
+        await queueSilentRefresh(db, u.user_id);
+      }
     }
     await db.from("sync_events").update({ status: "done" }).eq(
       "provider",
