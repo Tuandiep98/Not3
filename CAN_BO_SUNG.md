@@ -373,6 +373,16 @@ GitHub → Settings → Developer settings → GitHub Apps → app Not3 → **Pe
 (github.com/settings/installations → Not3 → **Review request** → Accept; repo của org thì owner duyệt).
 Nếu đã bật webhook (G7): tick thêm sự kiện **Workflow run**, **Deployment status**, **Pull request review**, **Release**.
 
+### - [ ] G9. Cho tài khoản Jira khác đăng nhập (app Atlassian đang ở chế độ Development)
+
+Lỗi "you don't have access to this app, this app is in development…" = chỉ owner app mới đăng nhập được.
+1. developer.atlassian.com/console/myapps → **Not3** → **Distribution** → **Edit** → **Sharing**.
+2. Điền **Vendor name**, **Privacy policy URL** (bắt buộc — cần một trang công khai), **Does your app store personal data? → Yes**
+   (Not3 lưu accountId Jira + tiêu đề ticket) → **Save changes**.
+3. Trước khi phát hành rộng: Not3 cần báo cáo accountId đang lưu qua **Personal Data Reporting API** (≤ 7 ngày / lần)
+   và xoá dữ liệu tài khoản đã đóng — chưa làm (ghi ở README §17).
+Tài khoản thuộc tổ chức chặn app bên thứ ba vẫn cần admin cho phép.
+
 ### - [ ] G5. Thử trên iPhone
 
 Build lại app lên máy (bản mới có quyền iCloud + Lịch), rồi:

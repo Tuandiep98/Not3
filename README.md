@@ -533,6 +533,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Mở lại khi bị trả lại: việc đã xong vì mục ngoài đã xong, nay mục quay lại đang làm (ticket về In Progress, request changes, review lại, PR mở lại, build đỏ lại) → tự bỏ tích, nhãn "Bị trả lại · …" + push (`tasks.reopened_at / reopened_reason`)
 - [x] Bảo mật: app chỉ được sửa cột `settings` của dòng `integrations` của mình (trước đây sửa được cả `vault_secret_id`)
 - [ ] Webhook Jira (cần đăng ký động qua API, gia hạn 30 ngày) — hiện dùng poll 15 phút
+- [ ] Atlassian Personal Data Reporting API (bắt buộc khi app Jira ở chế độ Sharing và lưu accountId)
 - [ ] GitHub: Projects v2, Discussions, cảnh báo bảo mật, tổng đóng góp (GraphQL / quyền riêng)
 - [ ] Thẻ nội dung hợp nhất `build-cards` (gộp PR ↔ ticket cùng việc, tóm tắt AI 2 dòng)
 
