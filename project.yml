@@ -1,0 +1,85 @@
+name: Not3
+options:
+  bundleIdPrefix: com.tuandiep
+  deploymentTarget:
+    iOS: "18.0"
+  developmentLanguage: vi
+  createIntermediateGroups: true
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: "8CH38V6M42"
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift
+    from: "2.0.0"
+targets:
+  Not3:
+    type: application
+    platform: iOS
+    sources:
+      - Not3
+    dependencies:
+      - package: Supabase
+        product: Supabase
+    entitlements:
+      path: Not3/Resources/Not3.entitlements
+      properties:
+        aps-environment: development
+        com.apple.developer.applesignin: [Default]
+        com.apple.developer.icloud-container-identifiers: [iCloud.com.tuandiep.not3]
+        com.apple.developer.icloud-services: [CloudKit]
+    info:
+      path: Not3/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Not3
+        CFBundleDevelopmentRegion: vi
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIBackgroundModes: [remote-notification]
+        NSCalendarsFullAccessUsageDescription: Not3 đọc lịch hôm nay để gợi ý việc buổi sáng lúc check-in, và ghi kế hoạch buổi chiều vào lịch "Not3".
+        NSMicrophoneUsageDescription: Not3 dùng micro để bạn nói việc cần làm thay vì gõ.
+        NSSpeechRecognitionUsageDescription: Not3 chuyển giọng nói thành chip việc cần làm, xử lý trên máy khi có thể.
+        SupabaseHost: $(SUPABASE_HOST)
+        SupabaseAnonKey: $(SUPABASE_ANON_KEY)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tuandiep.not3
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"
+  Not3Tests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Not3Tests
+    dependencies:
+      - target: Not3
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Not3:
+    build:
+      targets:
+        Not3: all
+        Not3Tests: [test]
+    test:
+      targets:
+        - Not3Tests

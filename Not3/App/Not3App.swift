@@ -1,0 +1,164 @@
+import SwiftData
+import SwiftUI
+import UIKit
+import UserNotifications
+
+@main
+struct Not3App: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        AppSettings.register()
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environment(Router.shared)
+                .environment(SupabaseService.shared)
+                .environment(CalendarService.shared)
+                .tint(Theme.accentInk)
+                .task { await AppLifecycle.onLaunch() }
+        }
+        .modelContainer(Persistence.shared)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                Task { await AppLifecycle.onForeground() }
+            }
+        }
+    }
+}
+
+@MainActor
+enum AppLifecycle {
+    static func onLaunch() async {
+        let context = Persistence.shared.mainContext
+        Persistence.seedIfNeeded(context)
+        Persistence.mergeDuplicateFolders(context)
+        CalendarService.shared.startObserving()
+        NotificationService.registerCategories()
+        // Permission is asked in context (first check-in save), not on first launch.
+        UIApplication.shared.registerForRemoteNotifications()
+        await SupabaseService.shared.restoreSession()
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-openCheckIn") { Router.shared.openCheckIn() }
+        if args.contains("-openFolders") { Router.shared.path = [] }
+        if args.contains("-seedSample") { seedSample(context) }
+        if args.contains("-fakeIntegrations") { SupabaseService.shared.useFakeIntegrations() }
+        #endif
+        await onForeground()
+    }
+
+    static func onForeground() async {
+        let context = Persistence.shared.mainContext
+        let supabase = SupabaseService.shared
+        await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
+        await CalendarService.shared.refresh(in: context)
+        await supabase.syncPending(context)
+        await supabase.uploadCalendarItems(context)
+        await supabase.pullContentRules()
+        await supabase.pullExternalItems(context)
+        await supabase.pullTaskUpdates(context)
+        await supabase.pullLinks(context)
+        await supabase.pullNoteSuggestions(context)
+        JournalService.updateToday(in: context)
+        supabase.markRefreshed()
+    }
+
+    #if DEBUG
+    /// Sample day for simulator screenshots (`-seedSample`).
+    private static func seedSample(_ context: ModelContext) {
+        guard (try? context.fetchCount(FetchDescriptor<TaskItem>())) == 0 else { return }
+        let samples: [(String, String, Int?, Int?, Bool)] = [
+            ("Review PR #42", "Công việc", 9, nil, true),
+            ("Học 20 từ vựng Anki", "Học ngôn ngữ", 14, 25, true),
+            ("Viết test module login", "Công việc", 16, 45, false),
+            ("JIRA-120: Push 12h", "Công việc", nil, nil, false),
+        ]
+        for (title, category, hour, minutes, done) in samples {
+            let task = TaskItem(title: title, category: category,
+                                plannedAt: hour.map { DayClock.at(hour: $0, minute: 0) },
+                                durationMinutes: minutes, source: .manual)
+            if title.hasPrefix("JIRA") {
+                task.linkTitle = "JIRA-120 · Not3"; task.linkURL = "https://example.atlassian.net/browse/JIRA-120"
+                task.statusRaw = TaskStatus.doing.rawValue
+                task.reopenedAt = Date(); task.reopenedReason = "JIRA-120 → In Progress"
+            }
+            if title.hasPrefix("Review PR") { task.linkTitle = "Review PR #42 · app-ios"; task.linkURL = "https://github.com/example/app-ios/pull/42" }
+            context.insert(task)
+            if done { task.status = .done }
+        }
+        try? context.save()
+    }
+    #endif
+
+    /// App-bar refresh on "Hôm nay": ask the server to pull GitHub / Jira first, then the usual pass.
+    static func refreshNow() async {
+        let context = Persistence.shared.mainContext
+        await SupabaseService.shared.syncIntegrationsNow(context)
+        await onForeground()
+    }
+}
+
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        Task { await SupabaseService.shared.registerDevice(token: token) }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        // Simulator / no push entitlement: the local 12:00 fallback covers this.
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        [.banner, .sound, .list]
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let action = response.actionIdentifier
+        let content = response.notification.request.content
+        let category = content.categoryIdentifier
+        let taskId = (content.userInfo[NotificationService.taskIdKey] as? String).flatMap(UUID.init(uuidString:))
+        await handle(action: action, category: category, taskId: taskId)
+    }
+
+    @MainActor
+    private func handle(action: String, category: String, taskId: UUID?) async {
+        let context = Persistence.shared.mainContext
+        let supabase = SupabaseService.shared
+        if category == NotificationService.eveningCategory, let taskId {
+            await TaskActions.handleEvening(
+                action: action, taskId: taskId, in: context, serverPushActive: supabase.hasServerPush
+            )
+            if action == UNNotificationDefaultActionIdentifier { Router.shared.path = [.today] }
+            await supabase.syncPending(context)
+            return
+        }
+        if action.hasPrefix(NotificationService.moodActionPrefix),
+           let mood = Mood(rawValue: String(action.dropFirst(NotificationService.moodActionPrefix.count))) {
+            // Answered from the notification without opening the app.
+            CheckInService.recordMood(mood, in: context)
+            await SupabaseService.shared.syncPending(context)
+            return
+        }
+        if action == UNNotificationDefaultActionIdentifier, category == NotificationService.checkInCategory {
+            Router.shared.openCheckIn()
+        }
+    }
+}

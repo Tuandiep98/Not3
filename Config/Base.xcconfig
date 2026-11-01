@@ -1,0 +1,4 @@
+// Shared build settings. Secrets live in Secrets.xcconfig (gitignored).
+SUPABASE_HOST = lzeulkgzuhgznmcwoimr.supabase.co
+SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx6ZXVsa2d6dWhnem5tY3dvaW1yIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM1MzgwNTYsImV4cCI6MjEwOTExNDA1Nn0.6iFn_JQE9R1tmqSoymVy0RyNDZtVGMEQA8KFMZFXTkE
+#include? "Secrets.xcconfig"

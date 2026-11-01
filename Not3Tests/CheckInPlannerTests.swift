@@ -1,0 +1,99 @@
+import SwiftData
+import XCTest
+@testable import Not3
+
+@MainActor
+final class CheckInPlannerTests: XCTestCase {
+    private func date(_ hour: Int, _ minute: Int = 0) -> Date {
+        DayClock.at(hour: hour, minute: minute, on: DayClock.calendar.date(from: DateComponents(year: 2026, month: 11, day: 2))!)
+    }
+
+    func testTimeOptionsDropPastSlots() {
+        let labels = CheckInPlanner.timeOptions(now: date(15, 0)).map(\.label)
+        XCTAssertEqual(labels, ["15:30", "17:00", "Tối nay"])
+    }
+
+    func testTimeOptionsAtNoon() {
+        let labels = CheckInPlanner.timeOptions(now: date(12, 0)).map(\.label)
+        XCTAssertEqual(labels, ["14:00", "15:30", "17:00", "Tối nay"])
+    }
+
+    func testIfThenSentence() {
+        let time = TimeOption(id: "14:00", label: "14:00", date: date(14))
+        XCTAssertEqual(
+            CheckInPlanner.sentence(task: "Học 20 từ vựng Anki", time: time, duration: 25),
+            "Lúc 14:00, mình sẽ học 20 từ vựng Anki trong 25 phút."
+        )
+        let evening = TimeOption(id: "evening", label: "Tối nay", date: date(20))
+        XCTAssertEqual(
+            CheckInPlanner.sentence(task: "Đi bộ", time: evening, duration: nil),
+            "Tối nay, mình sẽ đi bộ."
+        )
+    }
+
+    func testSuggestionsPreferMissingNonWorkCategories() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let chips = ChipCatalog.defaultCategories.map { Chip(group: .category, label: $0, isBuiltIn: true) }
+        chips.forEach(context.insert)
+
+        let now = date(12)
+        let done = TaskItem(title: "Học 20 từ vựng Anki", category: "Học ngôn ngữ", plannedAt: nil, durationMinutes: 25, source: .manual)
+        context.insert(done)
+        done.status = .done
+
+        let result = CheckInPlanner.suggestions(categories: chips, recentTasks: [done], now: now)
+        XCTAssertEqual(result.count, 3)
+        XCTAssertFalse(result.contains { $0.category == "Học ngôn ngữ" }, "category used this week should not lead")
+        XCTAssertFalse(result.contains { $0.category == ChipCatalog.workCategory }, "self-development first")
+    }
+
+    func testMeaningfulDay() {
+        let task = TaskItem(title: "Viết test", category: "Công việc", plannedAt: nil, durationMinutes: 45, source: .manual)
+        XCTAssertFalse(CheckInPlanner.isMeaningful(day: Date(), tasks: [task]))
+        task.status = .done
+        XCTAssertTrue(CheckInPlanner.isMeaningful(day: Date(), tasks: [task]))
+    }
+
+    func testSaveCheckInCreatesPlannedTask() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let plan = CheckInService.Plan(
+            morningItems: ["Review PR #42"],
+            mood: .good,
+            task: AfternoonSuggestion(title: "Đi bộ", category: "Sức khoẻ", source: .manual),
+            time: TimeOption(id: "17:00", label: "17:00", date: date(17)),
+            durationMinutes: 15
+        )
+        let task = try XCTUnwrap(CheckInService.save(plan, in: context))
+        XCTAssertEqual(task.ifThenSentence, "Lúc 17:00, mình sẽ đi bộ trong 15 phút.")
+        let checkIn = try XCTUnwrap(CheckInService.todaysCheckIn(context))
+        XCTAssertEqual(checkIn.mood, .good)
+        XCTAssertEqual(checkIn.afternoonTaskIds, [task.id])
+        let chips = try context.fetch(FetchDescriptor<Chip>())
+        XCTAssertTrue(chips.contains { $0.label == "Sức khoẻ" && $0.useCount == 1 })
+    }
+
+    func testChoosingUnfinishedMorningTaskReschedulesItInsteadOfCopying() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let morning = TaskItem(title: "Review PR #42", category: "Công việc", plannedAt: date(9), durationMinutes: nil, source: .integration)
+        context.insert(morning)
+        try context.save()
+
+        let plan = CheckInService.Plan(
+            morningItems: [],
+            mood: .empty,
+            task: AfternoonSuggestion(title: morning.title, category: morning.category, source: .integration, taskId: morning.id),
+            time: TimeOption(id: "15:30", label: "15:30", date: date(15, 30)),
+            durationMinutes: 25
+        )
+        let saved = try XCTUnwrap(CheckInService.save(plan, in: context))
+        XCTAssertEqual(saved.id, morning.id, "same task, not a copy")
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<TaskItem>()), 1)
+        XCTAssertEqual(saved.plannedAt, date(15, 30))
+        XCTAssertEqual(saved.durationMinutes, 25)
+        XCTAssertEqual(saved.ifThenSentence, "Lúc 15:30, mình sẽ review PR #42 trong 25 phút.")
+        XCTAssertEqual(CheckInService.todaysCheckIn(context)?.afternoonTaskIds, [morning.id])
+    }
+}
