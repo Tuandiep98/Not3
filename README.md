@@ -458,6 +458,16 @@ open Not3.xcodeproj
 
 Test: `xcodebuild -project Not3.xcodeproj -scheme Not3 -destination 'platform=iOS Simulator,name=iPhone 17' test`
 
+### Xcode Cloud
+
+`ci_scripts/ci_post_clone.sh` cài XcodeGen, sinh `Not3.xcodeproj` và chép `Config/Package.resolved` vào project (Xcode Cloud không tự resolve package). Sau khi đổi version package, chép lại file:
+
+```bash
+cp Not3.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved Config/Package.resolved
+```
+
+Workflow (test simulator iOS 18 + 26, archive → TestFlight) tạo trong Xcode: **Product → Xcode Cloud → Create Workflow**.
+
 Tham số chạy chỉ có ở bản DEBUG: `-openCheckIn` mở thẳng sheet check-in, `-openFolders` mở màn Thư mục.
 
 ### Chạy backend
