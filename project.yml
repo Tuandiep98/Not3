@@ -11,7 +11,7 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "1.0.1"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: "8CH38V6M42"
@@ -40,7 +40,8 @@ targets:
       properties:
         aps-environment: development
         com.apple.developer.applesignin: [Default]
-        com.apple.developer.icloud-container-identifiers: [iCloud.com.tuandiep.not3]
+        com.apple.developer.icloud-container-identifiers:
+          [iCloud.com.tuandiep.not3]
         com.apple.developer.icloud-services: [CloudKit]
         com.apple.security.application-groups: [group.com.tuandiep.not3]
     info:
@@ -48,6 +49,8 @@ targets:
       properties:
         CFBundleDisplayName: Not3
         CFBundleDevelopmentRegion: vi
+        # Only HTTPS / Apple crypto (exempt): skips the TestFlight "Missing Compliance" prompt.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
