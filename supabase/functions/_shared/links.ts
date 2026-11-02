@@ -1,3 +1,4 @@
+import { syncDoneMessage, syncReopenedMessage } from "./notify.ts";
 import { z } from "npm:zod@3.23.8";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { canUseAI } from "./ai.ts";
@@ -292,16 +293,8 @@ export async function linkAndSync(
         send_at: now(),
         kind: "sync",
         payload: decision.reopened
-          ? {
-            title: "Việc được mở lại",
-            body: `${reopenReason(item)}: ${task.title}`,
-            task_id: task.id,
-          }
-          : {
-            title: "Đã đánh dấu xong",
-            body: `${item.title} → ${task.title}`,
-            task_id: task.id,
-          },
+          ? syncReopenedMessage(task, item)
+          : syncDoneMessage(task, item),
       });
     }
   }

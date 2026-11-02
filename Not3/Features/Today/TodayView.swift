@@ -12,8 +12,32 @@ struct TodayView: View {
     @Query(sort: \Folder.sortOrder) private var folders: [Folder]
 
     @State private var now = Date()
+    /// Row flashed after opening a notification / widget link for it.
+    @State private var highlighted: UUID?
 
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                .task(id: router.focusTaskId) { await focus(router.focusTaskId, proxy: proxy) }
+        }
+    }
+
+    /// Scrolls to the task and flashes it. A task synced from the server may arrive a moment
+    /// after the app opens, so it waits briefly for the row.
+    private func focus(_ id: UUID?, proxy: ScrollViewProxy) async {
+        guard let id else { return }
+        for _ in 0..<12 where !todayTasks.contains(where: { $0.id == id }) {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        defer { router.focusTaskId = nil }
+        guard todayTasks.contains(where: { $0.id == id }) else { return }
+        withAnimation(.snappy) { proxy.scrollTo(id, anchor: .center) }
+        withAnimation(.easeIn(duration: 0.2)) { highlighted = id }
+        try? await Task.sleep(for: .seconds(1.6))
+        withAnimation(.easeOut(duration: 0.6)) { highlighted = nil }
+    }
+
+    private var list: some View {
         List {
             Section {
                 checkInCard
@@ -61,6 +85,8 @@ struct TodayView: View {
                     // Fixed order (time, then creation): ticking a task never moves it.
                     ForEach(todayTasks) { task in
                         TaskRow(task: task)
+                            .id(task.id)
+                            .listRowBackground(highlighted == task.id ? Theme.accent.opacity(0.18) : nil)
                             .swipeActions {
                                 if task.status != .done {
                                     Button("Huỷ", systemImage: "xmark", role: .destructive) {

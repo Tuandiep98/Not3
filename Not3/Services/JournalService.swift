@@ -1,18 +1,39 @@
 import Foundation
 import SwiftData
 
-/// "Nhật ký hôm nay" (README §12): one note per day in the "Nhật ký" folder, split Sáng / Chiều,
-/// filled with finished tasks, PRs, tickets and meetings. The app only rewrites the managed block
+/// "Nhật ký hôm nay" (README §12): one note per day in the "Nhật ký" folder — a one-line summary,
+/// then Sáng / Chiều with finished tasks (✓), meetings (◷) and GitHub / Jira activity (•). The app only rewrites the managed block
 /// between the two markers — anything the user types outside it is never touched.
 @MainActor
 enum JournalService {
     static let folderName = "Nhật ký"
-    static let beginMarker = "— Tự động —"
-    static let endMarker = "— Hết phần tự động —"
+    static let beginMarker = "— Not3 tự ghi —"
+    static let endMarker = "— Hết phần tự ghi —"
+    /// Markers of notes written before the new layout (still recognised and upgraded).
+    static let legacyMarkers = ("— Tự động —", "— Hết phần tự động —")
 
     struct Entry: Equatable {
+        enum Kind: Equatable {
+            /// A task ticked done today.
+            case task
+            /// A meeting / calendar event that already happened.
+            case meeting
+            /// PR, commit, review, ticket… from GitHub / Jira.
+            case activity(ExternalSource)
+        }
+
         let time: Date
         let text: String
+        var kind: Kind = .task
+
+        /// One symbol per kind so the list can be skimmed: ✓ done, ◷ meeting, • activity.
+        var line: String {
+            switch kind {
+            case .task: "✓ \(text)"
+            case .meeting: "◷ \(text)"
+            case .activity(let source): "• \(source.label) · \(text)"
+            }
+        }
     }
 
     static func updateToday(in context: ModelContext, now: Date = Date()) {
@@ -38,28 +59,53 @@ enum JournalService {
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate {
             $0.statusRaw == done && $0.completedAt != nil
         }))) ?? []
-        var entries = tasks.compactMap { task -> Entry? in
-            guard let at = task.completedAt, at >= start, at < end else { return nil }
-            return Entry(time: at, text: "✓ \(task.title)")
-        }
+        let doneToday = tasks.filter { ($0.completedAt ?? .distantPast) >= start && ($0.completedAt ?? .distantPast) < end }
+        var entries = doneToday.map { Entry(time: $0.completedAt ?? now, text: $0.title, kind: .task) }
+
+        // A finished task already tells the story of its PR / ticket: don't list it twice.
+        let shownURLs = Set(doneToday.compactMap(\.linkURL))
         let items = (try? context.fetch(FetchDescriptor<ExternalItem>(predicate: #Predicate {
             $0.occurredAt >= start && $0.occurredAt < end
         }))) ?? []
-        // Upcoming calendar events are not "done" yet.
-        entries += items.filter { $0.source != .calendar || $0.occurredAt <= now }.map {
-            Entry(time: $0.occurredAt, text: "\($0.source.label): \($0.title)")
+        entries += items.compactMap { item -> Entry? in
+            // Ignored items, and items that became tasks (shown once they are done), stay out.
+            guard item.decision != "ignored", item.decision != "task" else { return nil }
+            if let url = item.url, shownURLs.contains(url) { return nil }
+            if item.source == .calendar {
+                // Upcoming events are not "done" yet.
+                guard item.occurredAt <= now else { return nil }
+                return Entry(time: item.occurredAt, text: item.title, kind: .meeting)
+            }
+            return Entry(time: item.occurredAt, text: item.title, kind: .activity(item.source))
         }
         return entries.sorted { $0.time < $1.time }
     }
 
+    /// "4 việc xong · 2 cuộc họp · 3 hoạt động GitHub · 1 Jira"
+    static func summary(_ entries: [Entry]) -> String {
+        var parts: [String] = []
+        let tasks = entries.filter { $0.kind == .task }.count
+        let meetings = entries.filter { $0.kind == .meeting }.count
+        if tasks > 0 { parts.append("\(tasks) việc xong") }
+        if meetings > 0 { parts.append("\(meetings) cuộc họp") }
+        var first = true
+        for source in [ExternalSource.github, .jira] {
+            let count = entries.filter { $0.kind == .activity(source) }.count
+            guard count > 0 else { continue }
+            parts.append(first ? "\(count) hoạt động \(source.label)" : "\(count) \(source.label)")
+            first = false
+        }
+        return parts.joined(separator: " · ")
+    }
+
     static func render(_ entries: [Entry], now: Date) -> String {
         let noon = DayClock.noon(now)
-        let morning = entries.filter { $0.time < noon }
-        let afternoon = entries.filter { $0.time >= noon }
-        var lines = [beginMarker]
-        for (title, group) in [("Sáng", morning), ("Chiều", afternoon)] where !group.isEmpty {
-            lines.append(title)
-            lines += group.map { "\(DayClock.time($0.time))  \($0.text)" }
+        var lines = [beginMarker, "Hôm nay: \(summary(entries))"]
+        for (title, group) in [("Sáng", entries.filter { $0.time < noon }), ("Chiều", entries.filter { $0.time >= noon })]
+        where !group.isEmpty {
+            lines.append("")
+            lines.append("\(title.uppercased()) · \(group.count)")
+            lines += group.map { "\(DayClock.time($0.time))  \($0.line)" }
         }
         lines.append(endMarker)
         return lines.joined(separator: "\n")
@@ -67,9 +113,11 @@ enum JournalService {
 
     /// Swaps the text between the markers; appends the block when the note has none yet.
     static func replaceManagedBlock(in body: String, with block: String) -> String {
-        if let begin = body.range(of: beginMarker),
-           let end = body.range(of: endMarker, range: begin.upperBound..<body.endIndex) {
-            return body.replacingCharacters(in: begin.lowerBound..<end.upperBound, with: block)
+        for (open, close) in [(beginMarker, endMarker), legacyMarkers] {
+            if let begin = body.range(of: open),
+               let end = body.range(of: close, range: begin.upperBound..<body.endIndex) {
+                return body.replacingCharacters(in: begin.lowerBound..<end.upperBound, with: block)
+            }
         }
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? block : body + "\n\n" + block

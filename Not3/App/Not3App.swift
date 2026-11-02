@@ -161,11 +161,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Simulator / no push entitlement: the local 12:00 fallback covers this.
     }
 
+    /// In the app: FYI pushes go quietly to the list; a check-in already on screen is not repeated.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        [.banner, .sound, .list]
+        let content = notification.request.content
+        if content.interruptionLevel == .passive { return [.list] }
+        if content.categoryIdentifier == NotificationService.checkInCategory,
+           await MainActor.run(body: { Router.shared.isCheckInPresented }) {
+            return []
+        }
+        return [.banner, .sound, .list]
     }
 
     nonisolated func userNotificationCenter(
@@ -176,19 +183,48 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let content = response.notification.request.content
         let category = content.categoryIdentifier
         let taskId = (content.userInfo[NotificationService.taskIdKey] as? String).flatMap(UUID.init(uuidString:))
-        await handle(action: action, category: category, taskId: taskId)
+        let link = (content.userInfo[NotificationService.linkKey] as? String).flatMap(URL.init(string:))
+        let external = (content.userInfo[NotificationService.urlKey] as? String).flatMap(URL.init(string:))
+        await handle(action: action, category: category, taskId: taskId, link: link, external: external)
     }
 
     @MainActor
-    private func handle(action: String, category: String, taskId: UUID?) async {
+    private func handle(action: String, category: String, taskId: UUID?, link: URL?, external: URL?) async {
         let context = Persistence.shared.mainContext
         let supabase = SupabaseService.shared
+
+        // Tap on the notification body: open where it points (the task, check-in, summary).
+        if action == UNNotificationDefaultActionIdentifier {
+            if let link {
+                Router.shared.open(link)
+            } else if category == NotificationService.checkInCategory {
+                Router.shared.openCheckIn()
+            } else if let taskId {
+                Router.shared.open(URL(string: "not3://task/\(taskId.uuidString)")!)
+            }
+            return
+        }
+        if action == NotificationService.openExternalAction {
+            if let external { await UIApplication.shared.open(external) }
+            if let taskId { Router.shared.focusTaskId = taskId }
+            return
+        }
         if category == NotificationService.eveningCategory, let taskId {
             await TaskActions.handleEvening(
                 action: action, taskId: taskId, in: context, serverPushActive: supabase.hasServerPush
             )
-            if action == UNNotificationDefaultActionIdentifier { Router.shared.path = [.today] }
             await supabase.syncPending(context)
+            WidgetBridge.publish()
+            return
+        }
+        if category == NotificationService.reminderCategory, let taskId {
+            // A server task may not be on this device yet: pull first.
+            if TaskActions.task(id: taskId, in: context) == nil { await supabase.pullTaskUpdates(context) }
+            await TaskActions.handleReminder(
+                action: action, taskId: taskId, in: context, serverPushActive: supabase.hasServerPush
+            )
+            await supabase.syncPending(context)
+            WidgetBridge.publish()
             return
         }
         if action.hasPrefix(NotificationService.moodActionPrefix),
@@ -196,10 +232,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             // Answered from the notification without opening the app.
             CheckInService.recordMood(mood, in: context)
             await SupabaseService.shared.syncPending(context)
+            WidgetBridge.publish()
             return
-        }
-        if action == UNNotificationDefaultActionIdentifier, category == NotificationService.checkInCategory {
-            Router.shared.openCheckIn()
         }
     }
 }

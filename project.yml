@@ -44,6 +44,8 @@ targets:
           [iCloud.com.tuandiep.not3]
         com.apple.developer.icloud-services: [CloudKit]
         com.apple.security.application-groups: [group.com.tuandiep.not3]
+        # Reminders at a time the user chose may break through Focus.
+        com.apple.developer.usernotifications.time-sensitive: true
     info:
       path: Not3/Resources/Info.plist
       properties:

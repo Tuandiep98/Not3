@@ -53,6 +53,21 @@ enum TaskActions {
         return sentence
     }
 
+    /// Handles the reminder buttons: "Bắt đầu" (→ đang làm) and "Đã xong".
+    static func handleReminder(action: String, taskId: UUID, in context: ModelContext, serverPushActive: Bool) async {
+        guard let task = task(id: taskId, in: context) else { return }
+        switch action {
+        case NotificationService.reminderStartAction:
+            guard task.status == .todo else { return }
+            task.status = .doing
+        case NotificationService.reminderDoneAction:
+            await setDone(task, true, serverPushActive: serverPushActive)
+        default:
+            return
+        }
+        try? context.save()
+    }
+
     /// Handles the evening notification buttons.
     static func handleEvening(action: String, taskId: UUID, in context: ModelContext, serverPushActive: Bool) async {
         guard let task = task(id: taskId, in: context) else { return }

@@ -18,6 +18,8 @@ final class Router {
     /// "Hôm nay" opens by default, with "Thư mục" underneath like Apple Notes' last-folder behaviour.
     var path: [Route] = [.today]
     var isCheckInPresented = false
+    /// Task to scroll to and flash in "Hôm nay" (opened from a notification or widget).
+    var focusTaskId: UUID?
 
     func openCheckIn() {
         if path.last != .today { path = [.today] }
@@ -33,6 +35,9 @@ final class Router {
         switch url.host() {
         case "today":
             path = [.today]
+        case "task":
+            path = [.today]
+            focusTaskId = id
         case "checkin":
             openCheckIn()
         case "summary":

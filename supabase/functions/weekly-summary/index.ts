@@ -1,7 +1,13 @@
 // Sunday 20:00 local: weekly stats + AI summary (DeepSeek Pro), rules when AI is off.
 // Then pushes "Tổng kết đã sẵn sàng".
+import { weeklyMessage } from "../_shared/notify.ts";
 import { adminClient, json, requireServiceRole } from "../_shared/admin.ts";
-import { canUseAI, summarizeWeek, summarizeWeekByRules, type WeekStats } from "../_shared/ai.ts";
+import {
+  canUseAI,
+  summarizeWeek,
+  summarizeWeekByRules,
+  type WeekStats,
+} from "../_shared/ai.ts";
 
 type DueUser = { user_id: string; week_start: string; timezone: string };
 
@@ -28,7 +34,7 @@ Deno.serve(async (req) => {
       user_id: u.user_id,
       send_at: new Date().toISOString(),
       kind: "weekly_summary",
-      payload: { title: "Tổng kết tuần đã sẵn sàng", body: `${stats.meaningful_days}/7 ngày có việc ý nghĩa` },
+      payload: weeklyMessage(stats.meaningful_days),
       dedupe_key: `weekly:${u.user_id}:${u.week_start}`,
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
   }
@@ -38,19 +44,32 @@ Deno.serve(async (req) => {
 // deno-lint-ignore no-explicit-any
 async function weekStats(db: any, u: DueUser): Promise<WeekStats> {
   const start = new Date(`${u.week_start}T00:00:00Z`);
-  const days = [...Array(7)].map((_, i) => new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10));
+  const days = [...Array(7)].map((_, i) =>
+    new Date(start.getTime() + i * 86400000).toISOString().slice(0, 10)
+  );
   // Query a wide UTC window, then bucket by the user's local day.
   const from = new Date(start.getTime() - 86400000).toISOString();
   const to = new Date(start.getTime() + 8 * 86400000).toISOString();
 
   const [{ data: tasks }, { data: checkins }] = await Promise.all([
-    db.from("tasks").select("title, chips, completed_at").eq("user_id", u.user_id).eq("status", "done")
+    db.from("tasks").select("title, chips, completed_at").eq(
+      "user_id",
+      u.user_id,
+    ).eq("status", "done")
       .gte("completed_at", from).lt("completed_at", to),
-    db.from("checkins").select("day, mood").eq("user_id", u.user_id).gte("day", days[0]).lte("day", days[6]),
+    db.from("checkins").select("day, mood").eq("user_id", u.user_id).gte(
+      "day",
+      days[0],
+    ).lte("day", days[6]),
   ]);
 
   const local = (iso: string) =>
-    new Intl.DateTimeFormat("en-CA", { timeZone: u.timezone, year: "numeric", month: "2-digit", day: "2-digit" })
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: u.timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
       .format(new Date(iso));
   const byDay = new Map<string, string[]>(days.map((d) => [d, []]));
   const byCategory: Record<string, number> = {};
@@ -61,7 +80,11 @@ async function weekStats(db: any, u: DueUser): Promise<WeekStats> {
     const category = t.chips?.[0] ?? "Khác";
     byCategory[category] = (byCategory[category] ?? 0) + 1;
   }
-  const moods = new Map<string, string | null>((checkins ?? []).map((c: { day: string; mood: string | null }) => [c.day, c.mood]));
+  const moods = new Map<string, string | null>(
+    (checkins ?? []).map((
+      c: { day: string; mood: string | null },
+    ) => [c.day, c.mood]),
+  );
   const dayStats = days.map((day, i) => ({
     day,
     weekday: WEEKDAYS[i],
@@ -73,6 +96,8 @@ async function weekStats(db: any, u: DueUser): Promise<WeekStats> {
     meaningful_days: dayStats.filter((d) => d.done.length > 0).length,
     days: dayStats,
     by_category: byCategory,
-    empty_days: dayStats.filter((d) => d.done.length === 0).map((d) => d.weekday),
+    empty_days: dayStats.filter((d) => d.done.length === 0).map((d) =>
+      d.weekday
+    ),
   };
 }

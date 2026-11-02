@@ -507,6 +507,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Kéo `suggestions` từ server về sheet check-in (gợi ý server đứng trước, luật trên máy bù phần còn lại; đánh dấu picked/dismissed khi lưu)
 - [x] Hỏi lại buổi tối "Đã làm chưa?" (21:00 hoặc 15 phút sau khi xong việc) với nút Xong / Dời sang mai — thông báo cục bộ + push server (migration `evening_checkin`, tự huỷ push cũ khi task đổi giờ/xong)
 - [x] Không nhắc trùng: server đã gửi được push tới máy (`devices.last_sent_at`) thì app không đặt nhắc cục bộ; trước đó vẫn giữ thông báo trên máy
+- [x] Nội dung & mức ưu tiên thông báo thống nhất (`_shared/notify.ts`, migration `push_copy`, `NotificationService.Copy`): tiêu đề nói *việc gì* ("Bắt đầu: …", "Xong chưa: …", "Đã xong: …", "Cần làm lại: …"), thân nói *vì sao + bước tiếp*; nhắc giờ = time-sensitive (vượt Focus), "đã tự xong" = passive (không kêu), còn lại active; relevance-score, gộp theo thread, một thông báo / task (collapse-id). Chạm mở đúng task trong Hôm nay (cuộn tới + nhấp nháy), nút nhanh Bắt đầu / Đã xong, Mở trên GitHub / Jira
 - [x] Môi trường APNs lấy theo provisioning profile (cài từ Xcode → sandbox, TestFlight / App Store → production); lỗi gửi lưu ở `push_queue.last_error` và `devices.last_error`
 - [x] Nhập giọng nói (Speech, vi-VN, trên máy khi có thể): nút "Nói" trong check-in tách câu thành việc + giờ + thời lượng; nút micro trong trình soạn
 - [x] CI: Xcode Cloud (build khi push nhánh `release/*`); đã gỡ GitHub Actions — test Edge Functions chạy tay bằng `deno test`

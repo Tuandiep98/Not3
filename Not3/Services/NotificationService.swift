@@ -11,7 +11,14 @@ enum NotificationService {
     nonisolated static let eveningCategory = "EVENING"
     nonisolated static let eveningDoneAction = "EVENING_DONE"
     nonisolated static let eveningTomorrowAction = "EVENING_TOMORROW"
+    nonisolated static let reminderCategory = "REMINDER"
+    nonisolated static let reminderStartAction = "REMINDER_START"
+    nonisolated static let reminderDoneAction = "REMINDER_DONE"
+    nonisolated static let syncCategories = ["SYNC_GITHUB": "Mở trên GitHub", "SYNC_JIRA": "Mở trên Jira"]
+    nonisolated static let openExternalAction = "OPEN_EXTERNAL"
     nonisolated static let taskIdKey = "task_id"
+    nonisolated static let linkKey = "link"
+    nonisolated static let urlKey = "url"
     private static let eveningIdPrefix = "evening-"
     private static let checkInIdPrefix = "local-checkin-"
     private static let taskIdPrefix = "task-"
@@ -29,13 +36,36 @@ enum NotificationService {
         let evening = UNNotificationCategory(
             identifier: eveningCategory,
             actions: [
-                UNNotificationAction(identifier: eveningDoneAction, title: "Xong", options: []),
-                UNNotificationAction(identifier: eveningTomorrowAction, title: "Dời sang mai", options: []),
+                UNNotificationAction(identifier: eveningDoneAction, title: "Xong", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "checkmark")),
+                UNNotificationAction(identifier: eveningTomorrowAction, title: "Dời sang mai", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "arrow.turn.up.right")),
             ],
             intentIdentifiers: [],
             options: []
         )
-        UNUserNotificationCenter.current().setNotificationCategories([category, evening])
+        let reminder = UNNotificationCategory(
+            identifier: reminderCategory,
+            actions: [
+                UNNotificationAction(identifier: reminderStartAction, title: "Bắt đầu", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "play.fill")),
+                UNNotificationAction(identifier: reminderDoneAction, title: "Đã xong", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "checkmark")),
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+        // "Đã xong: …" / "Cần làm lại: …" pushes: jump straight to the PR / ticket.
+        let sync = syncCategories.map { id, title in
+            UNNotificationCategory(
+                identifier: id,
+                actions: [UNNotificationAction(identifier: openExternalAction, title: title, options: [.foreground],
+                                               icon: UNNotificationActionIcon(systemImageName: "arrow.up.right.square"))],
+                intentIdentifiers: [],
+                options: []
+            )
+        }
+        UNUserNotificationCenter.current().setNotificationCategories(Set([category, evening, reminder] + sync))
     }
 
     @discardableResult
@@ -63,9 +93,10 @@ enum NotificationService {
 
             let content = UNMutableNotificationContent()
             content.title = "Check-in buổi trưa"
-            content.body = "Buổi sáng của bạn thế nào? Chạm để lên kế hoạch chiều."
+            content.body = "Buổi sáng thế nào? Nhấn giữ để chọn tâm trạng, chạm để lên kế hoạch chiều."
             content.sound = .default
             content.categoryIdentifier = checkInCategory
+            content.style(.active, relevance: 0.8, thread: "checkin", link: "not3://checkin")
             let comps = DayClock.calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
             let request = UNNotificationRequest(
                 identifier: checkInIdPrefix + "\(comps.year!)-\(comps.month!)-\(comps.day!)",
@@ -80,9 +111,13 @@ enum NotificationService {
     static func scheduleReminder(for task: TaskItem) async {
         guard let date = task.plannedAt, date > Date() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Đến giờ rồi"
-        content.body = task.ifThenSentence ?? task.title
+        content.title = Copy.title("Bắt đầu: ", task.title)
+        content.body = Copy.reminderBody(task)
         content.sound = .default
+        content.categoryIdentifier = reminderCategory
+        content.userInfo = [taskIdKey: task.id.uuidString]
+        // A time the user chose: allowed through Focus.
+        content.style(.timeSensitive, relevance: 1, thread: "tasks", link: "not3://task/\(task.id.uuidString)")
         let comps = DayClock.calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         let request = UNNotificationRequest(
             identifier: taskIdPrefix + task.id.uuidString,
@@ -97,11 +132,12 @@ enum NotificationService {
         guard UserDefaults.standard.bool(forKey: SettingsKey.eveningCheckIn),
               let fire = eveningTime(for: task), fire > Date() else { return }
         let content = UNMutableNotificationContent()
-        content.title = "Đã làm chưa?"
-        content.body = task.title
+        content.title = Copy.title("Xong chưa: ", task.title)
+        content.body = "Nhấn giữ để chọn Xong hoặc Dời sang mai."
         content.sound = .default
         content.categoryIdentifier = eveningCategory
         content.userInfo = [taskIdKey: task.id.uuidString]
+        content.style(.active, relevance: 0.6, thread: "tasks", link: "not3://task/\(task.id.uuidString)")
         let comps = DayClock.calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
         let request = UNNotificationRequest(
             identifier: eveningIdPrefix + task.id.uuidString,
@@ -131,5 +167,37 @@ enum NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(
             withIdentifiers: [taskIdPrefix + taskId.uuidString, eveningIdPrefix + taskId.uuidString]
         )
+    }
+}
+
+/// Wording shared with the server (supabase/functions/_shared/notify.ts, migration push_copy):
+/// the title says what, the body says why and the next step.
+enum Copy {
+    static let maxTitle = 64
+
+    static func title(_ prefix: String, _ text: String) -> String {
+        let full = prefix + text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        guard full.count > maxTitle else { return full }
+        return String(full.prefix(maxTitle - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    @MainActor
+    static func reminderBody(_ task: TaskItem) -> String {
+        let sentence = task.ifThenSentence?.trimmingCharacters(in: .whitespaces)
+        var body = (sentence?.isEmpty == false ? sentence : nil)
+            ?? task.plannedAt.map { "Đến giờ bạn đã hẹn lúc \(DayClock.time($0))" }
+            ?? "Đến giờ bạn đã hẹn"
+        if let minutes = task.durationMinutes, minutes > 0 { body += " · \(minutes) phút" }
+        return body
+    }
+}
+
+extension UNMutableNotificationContent {
+    /// Interruption level, order in the summary, grouping and the tap destination.
+    func style(_ level: UNNotificationInterruptionLevel, relevance: Double, thread: String, link: String) {
+        interruptionLevel = level
+        relevanceScore = relevance
+        threadIdentifier = thread
+        userInfo[NotificationService.linkKey] = link
     }
 }

@@ -1,5 +1,6 @@
 // Runs every 5 minutes (pg_cron). pg_cron is UTC-only, so tick picks the users whose
 // *local* time has reached a milestone and fans out work (README §9).
+import { checkinMessage } from "../_shared/notify.ts";
 import {
   adminClient,
   invoke,
@@ -50,12 +51,7 @@ Deno.serve(async (req) => {
       user_id: u.user_id,
       send_at: new Date().toISOString(),
       kind: "checkin",
-      payload: {
-        title: "Check-in buổi trưa",
-        body: count
-          ? `${count} mục chờ xác nhận. Buổi sáng của bạn thế nào?`
-          : "Buổi sáng của bạn thế nào?",
-      },
+      payload: checkinMessage(count ?? 0),
       dedupe_key: `checkin:${u.user_id}:${u.local_day}`,
     }, { onConflict: "dedupe_key", ignoreDuplicates: true });
   }

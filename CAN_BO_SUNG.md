@@ -412,7 +412,7 @@ Build lại app lên máy (bản mới có quyền iCloud + Lịch), rồi:
 | Task không có mã, ví dụ "Viết test module login", và có PR "Add login tests" hôm nay → Đồng bộ ngay | Dưới task hiện "Liên kết với PR …? Có / Không" (hoặc tự liên kết nếu AI chắc chắn) |
 | PR đang mở / được nhờ review hôm nay, chưa có task | Hôm nay → **Mới đồng bộ**: chip Thành việc / Thành ghi chú / Bỏ qua / Luôn bỏ qua loại này |
 | Chạm **Thành việc** | Task mới (nhãn 🔗) ở Buổi chiều, mục biến khỏi hộp; merge PR → task tự xong |
-| Thư mục **Nhật ký** | Note "Nhật ký d/m" có Sáng / Chiều; tự gõ thêm ngoài khối "— Tự động —" thì vẫn giữ sau lần cập nhật sau |
+| Thư mục **Nhật ký** | Note "Nhật ký d/m": dòng "Hôm nay: …" tóm tắt, rồi SÁNG / CHIỀU (✓ việc xong, ◷ cuộc họp, • GitHub / Jira); tự gõ thêm ngoài khối "— Not3 tự ghi —" thì vẫn giữ sau lần cập nhật sau |
 
 Lần đầu mở bản mới, dữ liệu cũ được chuyển sang kho mới một lần (file cũ giữ lại thành `default.store.migrated`). Nếu thấy thiếu note / task sau khi cập nhật: báo ngay, đừng xoá app.
 
