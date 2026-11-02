@@ -5,6 +5,9 @@ import SwiftUI
 enum Route: Hashable {
     case today
     case summary
+    case activityDay(Date)
+    case activityHistory
+    case activityMethod
     case allNotes
     case folder(PersistentIdentifier)
     case note(PersistentIdentifier)

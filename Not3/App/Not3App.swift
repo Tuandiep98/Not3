@@ -54,6 +54,7 @@ enum AppLifecycle {
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-openCheckIn") { Router.shared.openCheckIn() }
         if args.contains("-openFolders") { Router.shared.path = [] }
+        if args.contains("-openSummary") { Router.shared.path = [.summary] }
         if args.contains("-seedSample") { seedSample(context) }
         if args.contains("-fakeIntegrations") { SupabaseService.shared.useFakeIntegrations() }
         #endif

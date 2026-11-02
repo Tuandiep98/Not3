@@ -40,6 +40,7 @@ struct TaskRecord: Encodable, Sendable {
     let source: String
     let ifThenSentence: String?
     let completedAt: Date?
+    let startedAt: Date?
     let updatedAt: Date
     /// The app's own writes; the server marks its sync changes "sync" so the app pulls only those.
     let updatedBy = "app"
@@ -48,7 +49,7 @@ struct TaskRecord: Encodable, Sendable {
         case id, userId = "user_id", title, chips
         case plannedAt = "planned_at", durationMinutes = "duration_minutes"
         case status, source, ifThenSentence = "if_then_sentence"
-        case completedAt = "completed_at", updatedAt = "updated_at", updatedBy = "updated_by"
+        case completedAt = "completed_at", startedAt = "started_at", updatedAt = "updated_at", updatedBy = "updated_by"
     }
 
     init(_ task: TaskItem, userId: UUID) {
@@ -62,6 +63,7 @@ struct TaskRecord: Encodable, Sendable {
         source = task.sourceRaw
         ifThenSentence = task.ifThenSentence
         completedAt = task.completedAt
+        startedAt = task.startedAt
         updatedAt = task.updatedAt
     }
 }
@@ -198,6 +200,21 @@ struct ExternalItemRecord: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case userId = "user_id", source, externalId = "external_id", title, url, status, kind
         case occurredAt = "occurred_at", decision, role, scope
+    }
+}
+
+/// `activity_events`: what I did on GitHub (timestamps) and my Jira work logs (start + end).
+struct ActivityEventRecord: Decodable, Sendable, Hashable {
+    let source: String
+    let externalId: String
+    let kind: String
+    let title: String
+    let startedAt: Date
+    let endedAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case source, externalId = "external_id", kind, title
+        case startedAt = "started_at", endedAt = "ended_at"
     }
 }
 

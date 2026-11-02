@@ -1,6 +1,13 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { classifyAndApply } from "./classify.ts";
 import { linkAndSync } from "./links.ts";
+import {
+  type ActivityRow,
+  githubActivity,
+  type GithubActivityEvent,
+  jiraWorklogs,
+  saveActivity,
+} from "./activity.ts";
 import { ensureJiraWebhook, JIRA_WEBHOOK_SCOPE } from "./jira_webhook.ts";
 import { queueSilentRefresh } from "./push.ts";
 import {
@@ -591,6 +598,8 @@ export async function fetchGithub(
   sinceIso: string,
   settings: GithubSettings = GITHUB_DEFAULTS,
   rules: DoneRules = NO_DONE_RULES,
+  /** Collects raw activity (time worked) when given. */
+  activity?: ActivityRow[],
 ): Promise<ExternalItem[]> {
   const login = String(
     meta.login ?? (await githubGet<{ login: string }>("/user", token)).login,
@@ -641,7 +650,7 @@ export async function fetchGithub(
   const needEvents = settings.commits || settings.releases || settings.merges ||
     settings.comments ||
     settings.mentions || settings.builds || settings.deploys;
-  const events = needEvents
+  const events = needEvents || activity
     ? await githubGet<GithubEvent[]>(
       `/users/${login}/events?per_page=100`,
       token,
@@ -653,7 +662,13 @@ export async function fetchGithub(
       return [] as GithubEvent[];
     })
     : [];
-  const today = events.filter((e) => e.created_at >= sinceIso);
+  // Every event of the feed (up to 100, recent days too): timestamps for "Tổng kết tuần".
+  activity?.push(
+    ...githubActivity(events as unknown as GithubActivityEvent[]),
+  );
+  const today = needEvents
+    ? events.filter((e) => e.created_at >= sinceIso)
+    : [];
   items.push(...githubEventItems(today, login, day, settings));
   const commentedOn = new Set(
     today.filter((e) =>
@@ -1045,6 +1060,8 @@ export async function fetchJira(
   meta: Record<string, unknown>,
   settings: JiraSettings = JIRA_DEFAULTS,
   rules: DoneRules = NO_DONE_RULES,
+  /** Collects my work logs (real start + duration) when given. */
+  activity?: ActivityRow[],
 ): Promise<ExternalItem[]> {
   const cloudId = String(meta.cloud_id ?? "");
   const site = String(meta.site_url ?? "");
@@ -1108,6 +1125,25 @@ export async function fetchJira(
       role: "author" as const,
       scope: issue.key.split("-")[0],
     })));
+  }
+  // Real time spent, for "Tổng kết tuần": started + timeSpentSeconds of my own logs (last 2 days,
+  // so a log added late for yesterday is still picked up; upserts keep it to one row).
+  if (activity && me) {
+    const recent = await jiraSearch(
+      cloudId,
+      token,
+      "worklogAuthor = currentUser() AND worklogDate >= -2d",
+      "summary",
+    ).catch(() => [] as JiraIssue[]);
+    activity.push(
+      ...await jiraWorklogs(
+        cloudId,
+        token.access_token,
+        me,
+        recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
+        new Date(Date.now() - 3 * 86_400_000),
+      ),
+    );
   }
   return items;
 }
@@ -1259,6 +1295,7 @@ export async function syncUser(
   const sinceIso = startOfLocalDay(timezone).toISOString();
   for (const row of rows ?? []) {
     const provider = row.provider as Provider;
+    const activity: ActivityRow[] = [];
     try {
       const token = await validToken(db, userId, provider);
       const items = provider === "github"
@@ -1268,13 +1305,16 @@ export async function syncUser(
           sinceIso,
           githubSettings(row.settings),
           doneRules(row.done_rules),
+          activity,
         )
         : await fetchJira(
           token,
           row.meta ?? {},
           jiraSettings(row.settings),
           doneRules(row.done_rules),
+          activity,
         );
+      await saveActivity(db, userId, activity);
       if (items.length) {
         const { error } = await db.from("external_items").upsert(
           items.map((i) => ({

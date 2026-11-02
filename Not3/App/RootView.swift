@@ -38,6 +38,12 @@ struct RootView: View {
             TodayView()
         case .summary:
             WeeklySummaryView()
+        case .activityDay(let day):
+            DayActivityView(day: day)
+        case .activityHistory:
+            ActivityHistoryView()
+        case .activityMethod:
+            ActivityMethodView()
         case .allNotes:
             NoteListView(folderID: nil)
         case .folder(let id):

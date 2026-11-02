@@ -152,6 +152,8 @@ final class TaskItem {
     var createdAt: Date = Date()
     var updatedAt: Date = Date()
     var completedAt: Date?
+    /// When it went to "đang làm" (Bắt đầu): with completedAt, the real time spent.
+    var startedAt: Date?
     var calendarEventId: String?
     var needsSync: Bool = true
     /// Linked PR / ticket (server `task_links`), shown as a badge that opens the original.
@@ -178,6 +180,11 @@ final class TaskItem {
         set {
             statusRaw = newValue.rawValue
             completedAt = newValue == .done ? Date() : nil
+            switch newValue {
+            case .doing: if startedAt == nil { startedAt = Date() }
+            case .todo, .cancelled: startedAt = nil
+            case .done: break
+            }
             touch()
         }
     }

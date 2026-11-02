@@ -87,6 +87,13 @@ struct TodayView: View {
                         TaskRow(task: task)
                             .id(task.id)
                             .listRowBackground(highlighted == task.id ? Theme.accent.opacity(0.18) : nil)
+                            .swipeActions(edge: .leading) {
+                                // Starts the timer: Bắt đầu → Xong gives the real time in "Tổng kết tuần".
+                                if task.status == .todo {
+                                    Button("Bắt đầu", systemImage: "play.fill") { task.status = .doing }
+                                        .tint(.blue)
+                                }
+                            }
                             .swipeActions {
                                 if task.status != .done {
                                     Button("Huỷ", systemImage: "xmark", role: .destructive) {

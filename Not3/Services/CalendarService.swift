@@ -83,6 +83,25 @@ final class CalendarService {
         byId.values.forEach(context.delete)
     }
 
+    /// Meetings with their real start and end, for "Tổng kết tuần". Skips all-day, cancelled and
+    /// declined events, and Not3's own plan calendar (those are tasks, counted separately).
+    func meetings(from start: Date, to end: Date) -> [ActivityInput] {
+        guard isAuthorized else { return [] }
+        let ownId = UserDefaults.standard.string(forKey: Self.calendarIdKey)
+        let calendars = store.calendars(for: .event).filter { $0.calendarIdentifier != ownId }
+        guard !calendars.isEmpty else { return [] }
+        return store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: calendars))
+            .filter { event in
+                !event.isAllDay && event.status != .canceled
+                    && event.attendees?.first(where: \.isCurrentUser)?.participantStatus != .declined
+                    && event.endDate > event.startDate
+            }
+            .map {
+                ActivityInput(start: $0.startDate, end: $0.endDate, kind: .meeting,
+                              title: $0.title ?? "Sự kiện", precision: .measured, source: .calendar)
+            }
+    }
+
     private static func externalId(for event: EKEvent) -> String {
         let base = event.calendarItemExternalIdentifier ?? event.eventIdentifier ?? UUID().uuidString
         return "\(base)@\(Int(event.startDate.timeIntervalSince1970))"

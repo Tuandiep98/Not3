@@ -424,6 +424,24 @@ final class SupabaseService {
         }
     }
 
+    /// GitHub activity and Jira work logs in a time range, for "Tổng kết tuần" (not stored locally).
+    func fetchActivity(from start: Date, to end: Date) async -> [ActivityEventRecord] {
+        guard let client, userId != nil else { return [] }
+        do {
+            return try await client.from("activity_events")
+                .select("source, external_id, kind, title, started_at, ended_at")
+                .gte("started_at", value: start.ISO8601Format())
+                .lt("started_at", value: end.ISO8601Format())
+                .order("started_at")
+                .limit(5000)
+                .execute()
+                .value
+        } catch {
+            lastError = error.localizedDescription
+            return []
+        }
+    }
+
     // MARK: "Mới đồng bộ" inbox
 
     private(set) var ignoreRules: Set<String> = []   // "provider|kind|scope" ("" scope = whole kind)
