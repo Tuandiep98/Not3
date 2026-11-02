@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { classifyAndApply } from "./classify.ts";
 import { linkAndSync } from "./links.ts";
+import { ensureJiraWebhook, JIRA_WEBHOOK_SCOPE } from "./jira_webhook.ts";
 import { queueSilentRefresh } from "./push.ts";
 import {
   type DoneRules,
@@ -71,6 +72,14 @@ function client(provider: Provider) {
 
 // --- OAuth -------------------------------------------------------------------
 
+/** Every scope must also be added to the Atlassian app (Permissions → Jira API). */
+export const JIRA_SCOPES = [
+  "read:jira-work",
+  "read:jira-user",
+  JIRA_WEBHOOK_SCOPE,
+  "offline_access",
+];
+
 export function authorizeUrl(provider: Provider, state: string): string {
   const { id } = client(provider);
   if (provider === "github") {
@@ -86,7 +95,7 @@ export function authorizeUrl(provider: Provider, state: string): string {
   const q = new URLSearchParams({
     audience: "api.atlassian.com",
     client_id: id,
-    scope: "read:jira-work read:jira-user offline_access",
+    scope: JIRA_SCOPES.join(" "),
     redirect_uri: callbackUrl(),
     state,
     response_type: "code",
@@ -1001,7 +1010,7 @@ export function jiraIssuesJql(settings: JiraSettings): string | null {
 }
 
 /** The connected user's Jira accountId (stored in meta at connect; fetched for older connections). */
-async function jiraAccountId(
+export async function jiraAccountId(
   token: TokenSet,
   meta: Record<string, unknown>,
 ): Promise<string> {
@@ -1238,11 +1247,14 @@ export async function syncUser(
   db: SupabaseClient,
   userId: string,
   timezone: string,
+  only?: Provider,
 ): Promise<Record<Provider, number | string>> {
-  const { data: rows } = await db
+  let query = db
     .from("integrations")
     .select("provider, meta, settings, done_rules")
     .eq("user_id", userId);
+  if (only) query = query.eq("provider", only);
+  const { data: rows } = await query;
   const result = {} as Record<Provider, number | string>;
   const sinceIso = startOfLocalDay(timezone).toISOString();
   for (const row of rows ?? []) {
@@ -1280,6 +1292,17 @@ export async function syncUser(
         .eq("user_id", userId)
         .eq("provider", provider);
       result[provider] = items.length;
+      if (provider === "jira") {
+        // Near real-time updates: register / refresh the Jira webhook (never throws).
+        const meta = row.meta ?? {};
+        await ensureJiraWebhook(
+          db,
+          userId,
+          token,
+          meta,
+          () => jiraAccountId(token, meta),
+        );
+      }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       await db

@@ -138,7 +138,7 @@ Deno.test("Jira: statusCategory decides the state, not the status name", async (
   assertEquals(items[0].occurred_at, "2026-11-02T03:40:00.000Z");
 });
 
-Deno.test("authorize URLs carry state, callback and read-only Jira scopes", () => {
+Deno.test("authorize URLs carry state, callback and Jira scopes (read + webhooks only)", () => {
   Deno.env.set("SUPABASE_URL", "https://ref.supabase.co");
   Deno.env.set("GITHUB_CLIENT_ID", "gh");
   Deno.env.set("GITHUB_CLIENT_SECRET", "x");
@@ -153,7 +153,7 @@ Deno.test("authorize URLs carry state, callback and read-only Jira scopes", () =
   const jira = new URL(authorizeUrl("jira", "s2"));
   assertEquals(
     jira.searchParams.get("scope"),
-    "read:jira-work read:jira-user offline_access",
+    "read:jira-work read:jira-user manage:jira-webhook offline_access",
   );
   assertEquals(jira.searchParams.get("audience"), "api.atlassian.com");
 });

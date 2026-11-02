@@ -296,7 +296,7 @@ final class SupabaseService {
         guard let client, userId != nil else { integrations = []; return }
         do {
             integrations = try await client.from("integrations")
-                .select("provider, account_name, last_synced_at, last_error, settings, done_rules")
+                .select("provider, account_name, last_synced_at, last_error, settings, done_rules, meta")
                 .execute()
                 .value
             providersReady = try await client.functions.invoke(

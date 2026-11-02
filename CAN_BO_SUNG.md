@@ -275,13 +275,10 @@ Máy hiện chỉ có runtime iOS 27.
 Trên iPhone thật: sheet Check-in → chip **Nói** → nói "lúc 3 giờ chiều học tiếng Anh 25 phút" → **Xong**.
 Mong đợi: chip "Học tiếng Anh" được chọn, giờ 15:00, 25 phút. Nếu máy chưa có tiếng Việt cho nhận dạng: **Cài đặt → Chung → Bàn phím → Đọc chính tả**, thêm Tiếng Việt.
 
-### - [x] E3. CI GitHub Actions
+### - [x] E3. CI — Xcode Cloud
 
-Workflow `.github/workflows/ios.yml` chưa chạy lần nào. Sau khi commit + push:
-
-1. GitHub → repo **Not3** → tab **Actions**.
-2. Job **Test on iOS 26**, **Test on iOS 18**, **Edge Functions type-check** phải xanh.
-3. Nếu runner `macos-26` chưa có: đổi `runs-on` sang image mới nhất trong [danh sách runner](https://github.com/actions/runner-images). Nếu tải runtime iOS 18 quá lâu/hỏng: gửi log để chỉnh.
+Đã gỡ GitHub Actions; build/test chạy trên **Xcode Cloud** (workflow tạo trong Xcode, build khi push nhánh `release/*`).
+Không cần biến môi trường; `ci_scripts/ci_post_clone.sh` tự chạy XcodeGen và chép `Config/Package.resolved`.
 
 ---
 
@@ -382,6 +379,21 @@ Lỗi "you don't have access to this app, this app is in development…" = chỉ
 3. Trước khi phát hành rộng: Not3 cần báo cáo accountId đang lưu qua **Personal Data Reporting API** (≤ 7 ngày / lần)
    và xoá dữ liệu tài khoản đã đóng — chưa làm (ghi ở README §17).
 Tài khoản thuộc tổ chức chặn app bên thứ ba vẫn cần admin cho phép.
+
+### - [ ] G10. Bật webhook Jira (cập nhật gần như tức thì)
+
+Code + function `webhook-jira` đã deploy. Chỉ thiếu quyền tạo webhook trong app Atlassian:
+
+1. [developer.atlassian.com/console/myapps](https://developer.atlassian.com/console/myapps/) → **Not3** → **Permissions → Jira API → Configure → Edit Scopes** (Classic scopes).
+2. Tick thêm **`manage:jira-webhook`** (Manage Jira webhooks) → **Save**. **Làm bước này trước khi kết nối lại**: server giờ xin cả scope này, app Atlassian chưa có thì màn đăng nhập Jira báo lỗi scope.
+3. Trong app Not3: **Cài đặt → Jira → Ngắt kết nối**, rồi **Kết nối** lại và đồng ý quyền mới.
+4. Kiểm tra: **Cài đặt → Jira** có dòng ⚡ "Cập nhật tức thì đang bật". Đổi trạng thái một ticket được giao cho bạn → trong ~vài giây task trong app đổi theo (nếu app ở nền: qua silent push).
+
+Ghi chú:
+- Không cần secret mới: Jira ký webhook bằng **Client secret** (`JIRA_CLIENT_SECRET`) đã có.
+- Webhook chỉ phủ ticket bạn được giao / bạn tạo. "Theo dõi", "chuyển trạng thái", "log work" vẫn đi qua poll 15 phút.
+- App Atlassian ở chế độ Development: Jira chỉ gửi webhook cho tài khoản **owner** của app (là bạn). Người khác cần G9 trước.
+- Nếu dòng trong Cài đặt báo lỗi: gửi nguyên văn cho mình; xem thêm log function `webhook-jira` trên Supabase Dashboard.
 
 ### - [ ] G5. Thử trên iPhone
 

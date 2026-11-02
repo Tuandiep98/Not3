@@ -239,12 +239,25 @@ struct IntegrationRecord: Decodable, Sendable, Identifiable {
     let lastError: String?
     var settings: [String: Bool]?
     var doneRules: DoneRules?
+    /// Jira webhook state (integrations.meta): nil = not attempted yet.
+    var webhook: WebhookState?
 
     var id: String { provider }
 
+    enum WebhookState: Equatable, Sendable {
+        case active
+        case failed(String)
+    }
+
+    private struct Meta: Decodable {
+        let webhookIds: [Int64]?
+        let webhookError: String?
+        enum CodingKeys: String, CodingKey { case webhookIds = "webhook_ids", webhookError = "webhook_error" }
+    }
+
     enum CodingKeys: String, CodingKey {
         case provider, accountName = "account_name", lastSyncedAt = "last_synced_at", lastError = "last_error"
-        case settings, doneRules = "done_rules"
+        case settings, doneRules = "done_rules", meta
     }
 
     init(provider: String, accountName: String?, lastSyncedAt: Date?, lastError: String?, settings: [String: Bool]? = nil) {
@@ -264,6 +277,13 @@ struct IntegrationRecord: Decodable, Sendable, Identifiable {
         // Tolerate unexpected value types in the jsonb column.
         settings = try? c.decodeIfPresent([String: Bool].self, forKey: .settings)
         doneRules = try? c.decodeIfPresent(DoneRules.self, forKey: .doneRules)
+        if let meta = try? c.decodeIfPresent(Meta.self, forKey: .meta) {
+            if let ids = meta.webhookIds, !ids.isEmpty {
+                webhook = .active
+            } else if let error = meta.webhookError {
+                webhook = .failed(error)
+            }
+        }
     }
 }
 

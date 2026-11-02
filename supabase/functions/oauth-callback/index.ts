@@ -4,6 +4,7 @@ import { adminClient } from "../_shared/admin.ts";
 import {
   accountInfo,
   exchangeCode,
+  JIRA_SCOPES,
   type Provider,
   syncUser,
 } from "../_shared/integrations.ts";
@@ -43,9 +44,7 @@ Deno.serve(async (req) => {
       p_user: row.user_id,
       p_provider: provider,
       p_account: account,
-      p_scopes: provider === "jira"
-        ? ["read:jira-work", "read:jira-user", "offline_access"]
-        : [],
+      p_scopes: provider === "jira" ? JIRA_SCOPES : [],
       p_token: token,
       p_meta: meta,
     });

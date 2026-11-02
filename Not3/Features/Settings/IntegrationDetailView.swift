@@ -53,6 +53,15 @@ struct IntegrationDetailView: View {
                     }
                 }
                 .disabled(isSyncing)
+            } footer: {
+                if source == .jira, let webhook = record?.webhook {
+                    switch webhook {
+                    case .active:
+                        Label("Cập nhật tức thì đang bật: Jira báo ngay khi ticket của bạn thay đổi.", systemImage: "bolt.fill")
+                    case .failed(let error):
+                        Label("Chưa bật cập nhật tức thì — \(error). Dữ liệu vẫn đồng bộ mỗi 15 phút.", systemImage: "bolt.slash")
+                    }
+                }
             }
 
             ForEach(IntegrationOption.Group.allCases, id: \.self) { group in

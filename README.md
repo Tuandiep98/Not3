@@ -509,7 +509,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Không nhắc trùng: server đã gửi được push tới máy (`devices.last_sent_at`) thì app không đặt nhắc cục bộ; trước đó vẫn giữ thông báo trên máy
 - [x] Môi trường APNs lấy theo provisioning profile (cài từ Xcode → sandbox, TestFlight / App Store → production); lỗi gửi lưu ở `push_queue.last_error` và `devices.last_error`
 - [x] Nhập giọng nói (Speech, vi-VN, trên máy khi có thể): nút "Nói" trong check-in tách câu thành việc + giờ + thời lượng; nút micro trong trình soạn
-- [x] CI GitHub Actions: test trên simulator iOS 26 + iOS 18, type-check Edge Functions (chưa chạy thử, xem `CAN_BO_SUNG.md`)
+- [x] CI: Xcode Cloud (build khi push nhánh `release/*`); đã gỡ GitHub Actions — test Edge Functions chạy tay bằng `deno test`
 - [ ] TestFlight 10–20 người (cần Team ID, APNs, Supabase — xem `CAN_BO_SUNG.md`)
 
 **Giai đoạn 2 — AI DeepSeek** (code xong, chờ API key)
@@ -543,7 +543,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] "Tính là hoàn thành" (`integrations.done_rules`): Jira — chọn thêm trạng thái tính là xong (danh sách lấy từ Jira, vd Code Review / Release Testing); GitHub — PR của tôi xong khi merge / được duyệt / sẵn sàng review, nhãn tính là xong (vd `ready-for-qa`)
 - [x] Mở lại khi bị trả lại: việc đã xong vì mục ngoài đã xong, nay mục quay lại đang làm (ticket về In Progress, request changes, review lại, PR mở lại, build đỏ lại) → tự bỏ tích, nhãn "Bị trả lại · …" + push (`tasks.reopened_at / reopened_reason`)
 - [x] Bảo mật: app chỉ được sửa cột `settings` của dòng `integrations` của mình (trước đây sửa được cả `vault_secret_id`)
-- [ ] Webhook Jira (cần đăng ký động qua API, gia hạn 30 ngày) — hiện dùng poll 15 phút
+- [x] Webhook Jira (`webhook-jira`): server tự đăng ký webhook động cho từng người (assignee / reporter = mình; issue tạo / sửa / xoá) bằng token của họ, tự gia hạn khi còn < 7 ngày (Jira cho 30 ngày), lỗi thì thử lại sau 1 ngày; xác thực JWT HS256 ký bằng client secret; payload chỉ là tín hiệu → kéo lại Jira bằng token người dùng rồi link / phân loại / silent push. Poll 15 phút vẫn giữ làm lưới an toàn (theo dõi, chuyển trạng thái, log work không có trong webhook). Cần scope `manage:jira-webhook` — xem `CAN_BO_SUNG.md` G10
 - [ ] Atlassian Personal Data Reporting API (bắt buộc khi app Jira ở chế độ Sharing và lưu accountId)
 - [ ] GitHub: Projects v2, Discussions, cảnh báo bảo mật, tổng đóng góp (GraphQL / quyền riêng)
 - [ ] Thẻ nội dung hợp nhất `build-cards` (gộp PR ↔ ticket cùng việc, tóm tắt AI 2 dòng)

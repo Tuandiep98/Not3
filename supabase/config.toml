@@ -429,3 +429,6 @@ verify_jwt = false
 
 [functions.webhook-github]
 verify_jwt = false
+
+[functions.webhook-jira]
+verify_jwt = false
