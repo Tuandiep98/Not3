@@ -16,7 +16,9 @@ final class SupabaseService {
     private(set) var isSyncing = false
     private(set) var lastSyncAt: Date?
     private(set) var lastError: String?
-    /// True once this device's APNs token is stored server-side, so the server sends the 12:00 push.
+    /// True once the server has delivered at least one push to this device. Until then the app keeps
+    /// its on-device notifications, so a broken APNs setup (wrong key environment…) never leaves
+    /// the user with no reminders at all.
     private(set) var hasServerPush = false
 
     /// Last full refresh (foreground pass or the ↻ button on "Hôm nay").
@@ -105,19 +107,39 @@ final class SupabaseService {
     func registerDevice(token: String) async {
         pendingDeviceToken = token
         guard let client, let userId else { return }
-        #if DEBUG
-        let environment = "sandbox"
-        #else
-        let environment = "production"
-        #endif
         do {
             try await client.from("devices")
-                .upsert(DeviceRecord(userId: userId, apnsToken: token, environment: environment), onConflict: "apns_token")
+                .upsert(DeviceRecord(userId: userId, apnsToken: token, environment: Self.apnsEnvironment), onConflict: "apns_token")
                 .execute()
-            hasServerPush = true
+            let rows: [DeviceDeliveryRecord] = try await client.from("devices")
+                .select("last_sent_at")
+                .eq("apns_token", value: token)
+                .limit(1)
+                .execute()
+                .value
+            let delivered = rows.first?.lastSentAt != nil
+            if delivered != hasServerPush {
+                hasServerPush = delivered
+                // The token usually arrives after the launch pass already scheduled local check-ins.
+                await NotificationService.rescheduleCheckIns(in: Persistence.shared.mainContext, serverPushActive: delivered)
+            }
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// APNs environment of the token this build receives. It follows the provisioning profile, not the
+    /// build configuration: Xcode-installed builds (development profile, Debug or Release) get sandbox
+    /// tokens; TestFlight / App Store builds have no embedded profile and get production tokens.
+    nonisolated static var apnsEnvironment: String {
+        guard let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+              let data = try? Data(contentsOf: url) else { return "production" }
+        // The profile is a signed CMS blob with the plist stored as plain text inside.
+        let text = String(decoding: data, as: UTF8.self)
+        guard let key = text.range(of: "<key>aps-environment</key>"),
+              let start = text.range(of: "<string>", range: key.upperBound..<text.endIndex),
+              let end = text.range(of: "</string>", range: start.upperBound..<text.endIndex) else { return "production" }
+        return text[start.upperBound..<end.lowerBound] == "development" ? "sandbox" : "production"
     }
 
     // MARK: Sync (SwiftData first, push pending rows when online)

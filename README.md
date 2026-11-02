@@ -496,7 +496,8 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Edge Functions: `tick`, `send-push` (APNs ES256), `build-checkin` (theo luật)
 - [x] Kéo `suggestions` từ server về sheet check-in (gợi ý server đứng trước, luật trên máy bù phần còn lại; đánh dấu picked/dismissed khi lưu)
 - [x] Hỏi lại buổi tối "Đã làm chưa?" (21:00 hoặc 15 phút sau khi xong việc) với nút Xong / Dời sang mai — thông báo cục bộ + push server (migration `evening_checkin`, tự huỷ push cũ khi task đổi giờ/xong)
-- [x] Không nhắc trùng: có push server thì app không đặt nhắc cục bộ
+- [x] Không nhắc trùng: server đã gửi được push tới máy (`devices.last_sent_at`) thì app không đặt nhắc cục bộ; trước đó vẫn giữ thông báo trên máy
+- [x] Môi trường APNs lấy theo provisioning profile (cài từ Xcode → sandbox, TestFlight / App Store → production); lỗi gửi lưu ở `push_queue.last_error` và `devices.last_error`
 - [x] Nhập giọng nói (Speech, vi-VN, trên máy khi có thể): nút "Nói" trong check-in tách câu thành việc + giờ + thời lượng; nút micro trong trình soạn
 - [x] CI GitHub Actions: test trên simulator iOS 26 + iOS 18, type-check Edge Functions (chưa chạy thử, xem `CAN_BO_SUNG.md`)
 - [ ] TestFlight 10–20 người (cần Team ID, APNs, Supabase — xem `CAN_BO_SUNG.md`)

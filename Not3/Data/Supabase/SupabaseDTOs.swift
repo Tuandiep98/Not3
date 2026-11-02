@@ -139,6 +139,15 @@ struct NoteRecord: Encodable, Sendable {
     }
 }
 
+/// Delivery state of this device, written by `send-push`.
+struct DeviceDeliveryRecord: Decodable, Sendable {
+    let lastSentAt: Date?
+
+    enum CodingKeys: String, CodingKey {
+        case lastSentAt = "last_sent_at"
+    }
+}
+
 // MARK: Phase 2 — AI
 
 struct WeeklySummaryRecord: Decodable, Sendable {

@@ -31,20 +31,41 @@ Deno.serve(async (req) => {
         ...(row.kind === "evening" ? { category: "EVENING" } : {}),
       };
     let delivered = false;
+    const errors: string[] = [];
     for (const d of devices) {
-      const res = await sendApns(d.apns_token, d.environment, { aps, ...row.payload }, {
-        pushType: row.kind === "silent" ? "background" : "alert",
-        collapseId: row.kind === "checkin" ? "checkin" : undefined,
-      });
-      if (res.ok) delivered = true;
-      else if (res.status === 410 || res.reason === "BadDeviceToken") {
-        await db.from("devices").delete().eq("apns_token", d.apns_token);
+      let res;
+      try {
+        res = await sendApns(d.apns_token, d.environment, { aps, ...row.payload }, {
+          pushType: row.kind === "silent" ? "background" : "alert",
+          collapseId: row.kind === "checkin" ? "checkin" : undefined,
+        });
+      } catch (e) {
+        // Provider token (bad APNS_KEY_P8 / missing secret) or network failure.
+        const message = (e as Error).message;
+        errors.push(`${d.environment} ${d.apns_token.slice(0, 8)}: ${message}`);
+        await db.from("devices").update({ last_error: message }).eq("apns_token", d.apns_token);
+        continue;
+      }
+      if (res.ok) {
+        delivered = true;
+        await db.from("devices").update({ last_sent_at: new Date().toISOString(), last_error: null })
+          .eq("apns_token", d.apns_token);
+      } else {
+        errors.push(`${d.environment} ${d.apns_token.slice(0, 8)}: ${res.status} ${res.reason}`);
+        if (res.status === 410 || res.reason === "BadDeviceToken") {
+          await db.from("devices").delete().eq("apns_token", d.apns_token);
+        } else {
+          await db.from("devices").update({ last_error: `${res.status} ${res.reason}` })
+            .eq("apns_token", d.apns_token);
+        }
       }
     }
+    if (errors.length) console.error(`push ${row.id}:`, errors.join("; "));
     const attempts = row.attempts + 1;
     await db.from("push_queue").update({
       status: delivered ? "sent" : attempts >= MAX_ATTEMPTS ? "failed" : "pending",
       attempts,
+      last_error: errors.length ? errors.join("; ") : null,
     }).eq("id", row.id);
     if (delivered) sent++;
   }
