@@ -57,6 +57,7 @@ enum AppLifecycle {
         Persistence.seedIfNeeded(context)
         Persistence.mergeDuplicateFolders(context)
         CalendarService.shared.startObserving()
+        RemindersService.shared.startObserving()
         WidgetBridge.startObserving()
         SpotlightIndexer.startObserving()
         WatchBridge.shared.start()
@@ -82,6 +83,8 @@ enum AppLifecycle {
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
         await CalendarService.shared.refresh(in: context)
+        // Lời nhắc / Sức khỏe, when turned on (on device only).
+        await LocalModule.refreshAll(in: context)
         // Today's occurrences of repeating tasks, before they sync.
         await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)
@@ -104,6 +107,8 @@ enum AppLifecycle {
         if !supabase.isSignedIn { await supabase.restoreSession() }
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await CalendarService.shared.refresh(in: context)
+        // Lời nhắc / Sức khỏe, when turned on (on device only).
+        await LocalModule.refreshAll(in: context)
         // Today's occurrences of repeating tasks, before they sync.
         await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)

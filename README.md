@@ -42,7 +42,7 @@ Mọi tính năng phải qua được các nguyên tắc sau:
 | ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Chạm trước, gõ sau**       | Mọi thao tác chính xong trong ≤ 3 lần chạm. Bàn phím và giọng nói chỉ là phương án dự phòng.                                                   |
 | **Giống Apple Notes**        | Thư mục → danh sách note → trình soạn. Dùng component SwiftUI hệ thống, không tự vẽ lại điều hướng.                                            |
-| **Server làm, app hiển thị** | Logic, lịch chạy, gợi ý và AI nằm trên Supabase. App chỉ tự xử lý khi bắt buộc phải ở trên máy (Lịch iOS, thông báo cục bộ dự phòng, offline). |
+| **Server làm, app hiển thị** | Logic, lịch chạy, gợi ý và AI nằm trên Supabase. App chỉ tự xử lý khi bắt buộc phải ở trên máy (Lịch, thông báo cục bộ dự phòng, offline). |
 | **Dữ liệu tự đến**           | Commit, PR, ticket Jira, sự kiện lịch được kéo về thành chip gợi ý; người dùng chỉ việc xác nhận.                                              |
 | **Ghi lại để nhìn lại**      | Mỗi check-in là bản ghi có cấu trúc, đủ để AI tổng kết tuần mà không cần người dùng viết dài.                                                  |
 | **Riêng tư rõ ràng**         | Token tích hợp mã hoá trên server, mọi bảng bật RLS, người dùng biết dữ liệu nào được gửi cho AI.                                              |
@@ -65,7 +65,7 @@ Mỗi màn dưới đây khớp với một artboard trong file thiết kế (kh
 | `Summary`      | Tổng kết tuần                 | "5/7 ngày có việc ý nghĩa", chấm T2–CN, biểu đồ theo loại việc, nhận xét AI (tạo lúc 20:00 CN)                                                                                               | `WeeklySummaryView`               |
 | `NoteList`     | Danh sách ghi chú             | Nhóm theo Hôm nay / 7 ngày trước; mỗi note: tiêu đề, giờ + dòng trích, tag loại việc + thời lượng; tìm trong thư mục                                                                         | `NoteListView`                    |
 | `Editor`       | Trình soạn                    | Ngày giờ ở giữa, tiêu đề, checklist tròn kiểu Notes; **hàng chip trên bàn phím** (checklist, loại việc, thời lượng) + nút micro                                                              | `NoteEditorView`                  |
-| `Settings`     | Cài đặt & kết nối             | Giờ check-in (12:00), tổng kết tuần (CN 20:00), thông báo dự phòng; Lịch iOS / GitHub / Jira; đồng bộ iCloud, đồng bộ note lên server, cho AI đọc dữ liệu; Sign in with Apple, xoá tài khoản | `SettingsView`                    |
+| `Settings`     | Cài đặt & kết nối             | Giờ check-in (12:00), tổng kết tuần (CN 20:00), thông báo dự phòng; Lịch / GitHub / Jira; đồng bộ iCloud, đồng bộ note lên server, cho AI đọc dữ liệu; Sign in with Apple, xoá tài khoản | `SettingsView`                    |
 | `HomeWidgets`  | Widget màn hình chính         | Widget Check-in (3 nút cảm nhận), Kế hoạch chiều, Tổng kết tuần, Thư mục ghi chú                                                                                                             | `Not3Widgets`                     |
 | `LockScreen`   | Màn hình khoá & thông báo 12h | Widget khoá (check-in, 5/7, việc tiếp theo); thông báo có 3 nút Hiệu quả / Bình thường / Trống                                                                                               | Widget + `UNNotificationCategory` |
 | `WidgetStates` | Trạng thái widget theo giờ    | Trước 12:00: gom buổi sáng · 12:00–13:00: chờ check-in · sau check-in: kế hoạch nếu–thì + "Bắt đầu 25 phút"; widget lớn "Hôm nay"; chế độ tô màu iOS 26                                      | Timeline provider                 |
@@ -187,7 +187,7 @@ Kích thước:
 │  App iOS · Apple Notes style · iOS 18 → 26                           │
 │  (Ghi chú · Hôm nay · Tổng kết · Sheet check-in · Widget · Intents)  │
 │        │                    │                      │                 │
-│   SwiftData            Supabase SDK         Lịch iOS (EventKit)      │
+│   SwiftData            Supabase SDK         Lịch (EventKit)      │
 │  (cache offline)    (Auth, API, Realtime)  (app đọc → gửi lên) ──┐   │
 └────────│────────────────────│─────────────────────────────────────│──┘
          ↕                    ↕                                     │
@@ -301,16 +301,21 @@ Nguyên tắc:
 
 | Nguồn                                         | Ai lấy dữ liệu        | Xác thực                                     | Dữ liệu                                                                  |
 | --------------------------------------------- | --------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
-| Lịch iOS (gồm Google/Outlook đã thêm vào máy) | **App**, qua EventKit | Quyền Lịch iOS (toàn quyền)                  | Đọc sự kiện trong ngày; ghi kế hoạch chiều vào lịch riêng "Note & To-do" |
+| Lịch (gồm Google/Outlook đã thêm vào máy) | **App**, qua EventKit | Quyền Lịch (toàn quyền)                  | Đọc sự kiện trong ngày; ghi kế hoạch chiều vào lịch riêng "Note & To-do" |
 | GitHub                                        | Edge Function         | GitHub App / OAuth App, đổi code trên server | Commit, PR mở/merge, review, issue đóng                                  |
 | Jira Cloud                                    | Edge Function         | Atlassian OAuth 2.0 (3LO), refresh token     | Issue chuyển trạng thái, worklog, issue được giao (JQL theo ngày)        |
+| Lời nhắc                                      | **App**, qua EventKit | Quyền Lời nhắc (toàn quyền), tự bật          | Lời nhắc đến hạn → việc (tick hai chiều); lời nhắc đã xong → Nhật ký     |
+| Sức khỏe                                      | **App**, qua HealthKit | Chỉ đọc, tự bật                             | Bài tập, chánh niệm, đạt mục tiêu bước → việc đã làm; giấc ngủ; số liệu tuần |
+| Gợi ý nhật ký                                 | **App**, picker của iOS | Không cần quyền, người dùng chọn từng mục  | Khoảnh khắc được chọn → việc đã làm + Nhật ký                            |
+| Bộ lọc Focus                                  | **App**, `SetFocusFilterIntent` | Cài đặt iOS → Tập trung          | Focus bật → Hôm nay và widget chỉ hiện loại việc đã chọn                 |
 | Để sau                                        | Supabase              | —                                            | Bitbucket, Google Calendar trực tiếp, Notion, Linear, Slack              |
 
 - **OAuth**: app mở `ASWebAuthenticationSession` → provider redirect về `oauth-callback` → server đổi code, mã hoá token vào Vault → universal link về app.
 - **Adapter chung**: mỗi nguồn là một module trả về `ExternalItem[]`, nên thêm nguồn mới không phải sửa app.
-- **Lịch iOS**: đọc khi mở app, trong `BGAppRefreshTask` buổi sáng, và luôn đọc lại khi mở sheet check-in. Nếu máy chưa báo lên quá 6 giờ, server gửi silent push.
+- **Ứng dụng của Apple** (`Services/Modules/`): Lời nhắc, Sức khỏe, Gợi ý nhật ký tắt sẵn, bật như kết nối dịch vụ bên thứ ba, mỗi mục có màn cài đặt riêng (cả Lịch). Dữ liệu chỉ ở trên máy: `ExternalItem` của các nguồn này không đẩy lên `external_items`, không gửi cho AI; Tổng kết tuần tính số liệu sức khỏe ngay trên máy.
+- **Lịch**: đọc khi mở app, trong `BGAppRefreshTask` buổi sáng, và luôn đọc lại khi mở sheet check-in. Nếu máy chưa báo lên quá 6 giờ, server gửi silent push.
 
-### Đồng bộ hai chiều với Lịch iOS (chạy trên máy)
+### Đồng bộ hai chiều với Lịch (chạy trên máy)
 
 - **App → Lịch**: "Lưu kế hoạch" tạo sự kiện EventKit trong lịch riêng của app. Task lưu `calendarItemExternalIdentifier`.
 - **Lịch → App**: lắng nghe `EKEventStoreChanged`.
@@ -324,7 +329,7 @@ Nguyên tắc:
 
 ## 12. Đồng bộ trạng thái & thẻ nội dung
 
-Ba nguồn tín hiệu đi chung một hàng đợi có chống trùng: **webhook** cho tốc độ, **cron quét bù** cho độ chắc chắn, **app báo lên** cho Lịch iOS. Thay đổi được đẩy về app (Realtime) và widget (silent push).
+Ba nguồn tín hiệu đi chung một hàng đợi có chống trùng: **webhook** cho tốc độ, **cron quét bù** cho độ chắc chắn, **app báo lên** cho Lịch. Thay đổi được đẩy về app (Realtime) và widget (silent push).
 
 Ánh xạ trạng thái:
 
@@ -359,7 +364,7 @@ Làm một mình, bán thời gian, khoảng **14–20 tuần**. Mỗi giai đo�
 | --- | ------------------ | --------- | ---------------------------------------------------------------------------------- | ----------------------- |
 | 1   | **Nền tảng + MVP** | 6–8 tuần  | Supabase Auth + RLS · App Notes iOS 18/26 · Chip + check-in 12h · Cron + push APNs | TestFlight 10–20 người  |
 | 2   | AI DeepSeek        | 2–3 tuần  | Edge `ai-gateway` · chip, gợi ý chiều · tổng kết tuần · dự phòng theo luật         | Gợi ý được chọn dùng    |
-| 3   | Tích hợp + sync    | 3–5 tuần  | Lịch iOS (EventKit) · GitHub OAuth · Jira OAuth (3LO) · đồng bộ CloudKit           | Chip sáng tự điền đúng  |
+| 3   | Tích hợp + sync    | 3–5 tuần  | Lịch (EventKit) · GitHub OAuth · Jira OAuth (3LO) · đồng bộ CloudKit           | Chip sáng tự điền đúng  |
 | 4   | Ra mắt             | 3–4 tuần  | Widget, Live Activity · App Intents, Siri · Supabase gói Pro · App Store, privacy  | Qua App Review          |
 
 Chỉ riêng giai đoạn 1 đã đủ để dùng hằng ngày. AI bắt đầu khi có API key DeepSeek.
@@ -374,7 +379,7 @@ Chỉ riêng giai đoạn 1 đã đủ để dùng hằng ngày. AI bắt đầu
 | DeepSeek lỗi, đổi tên model, hết hạn mức           | Không có chip gợi ý AI                     | Gợi ý theo luật SQL; tên model tự lấy từ `/models`                     |
 | Dữ liệu công việc gửi tới AI                       | Vi phạm chính sách công ty; khó qua review | Bật AI riêng từng tích hợp; chỉ gửi tiêu đề; khai báo App Privacy        |
 | CloudKit + Supabase xung đột                       | Dữ liệu lệch giữa thiết bị                 | Mỗi loại dữ liệu chỉ có một nguồn chính                                  |
-| Lịch iOS chỉ đọc trên máy, chạy nền không đúng giờ | Chip sáng thiếu sự kiện lịch               | Đọc lại lịch khi mở sheet check-in                                       |
+| Lịch chỉ đọc trên máy, chạy nền không đúng giờ | Chip sáng thiếu sự kiện lịch               | Đọc lại lịch khi mở sheet check-in                                       |
 | Hỗ trợ iOS 18 + 26                                 | Gấp đôi công kiểm thử UI                   | Gom API iOS 26 vào vài modifier; CI chạy cả hai simulator                |
 | Yêu cầu App Store                                  | Bị từ chối                                 | Sign in with Apple; nút xoá tài khoản; mô tả rõ dữ liệu thu thập         |
 
@@ -384,7 +389,7 @@ Chỉ riêng giai đoạn 1 đã đủ để dùng hằng ngày. AI bắt đầu
 - iOS: target iOS 18, giao diện đầy đủ trên iOS 26
 - AI: DeepSeek qua Edge Function
 - Đồng bộ: CloudKit cho nội dung note, Supabase cho dữ liệu cần tính toán
-- Tích hợp đợt đầu: Lịch iOS, GitHub, Jira (Bitbucket để sau)
+- Tích hợp đợt đầu: Lịch, GitHub, Jira (Bitbucket để sau)
 - Nội dung note đồng bộ lên Supabase mặc định, có công tắc tắt trong Cài đặt
 
 **Còn mở**
@@ -531,7 +536,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 
 **Giai đoạn 3 — Tích hợp + sync** (code xong, chờ GitHub App / Atlassian app — xem `CAN_BO_SUNG.md` mục G)
 
-- [x] Lịch iOS (EventKit, trên máy): đọc sự kiện hôm nay → chip sáng (đọc lại khi mở check-in), đẩy lên `external_items`
+- [x] Lịch (EventKit, trên máy): đọc sự kiện hôm nay → chip sáng (đọc lại khi mở check-in), đẩy lên `external_items`
 - [x] Ghi kế hoạch chiều vào lịch riêng "Not3" (công tắc "Thêm vào Lịch" trong check-in); dời giờ / xoá trong app Lịch → task đổi giờ / huỷ, nhắc giờ dời theo; huỷ / dời trong app → sự kiện cập nhật
 - [x] GitHub (GitHub App, chỉ đọc) + Jira (OAuth 2.0 3LO): `integrations` (connect / sync / status), `oauth-callback` (đổi code trên server, token vào Vault qua `save_integration`), tự làm mới token
 - [x] Kéo dữ liệu: PR merge / review / đóng, issue, commit gom theo repo; ticket Jira theo `statusCategory`; cron 30 phút trước check-in (`sync-integrations`) + "Đồng bộ ngay"
@@ -571,5 +576,15 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] App Intents (`Not3/Intents/`): Thêm việc (giờ / thời lượng / hộp chờ), Đánh dấu xong, Bắt đầu việc tiếp theo, Hôm nay còn việc gì, Ghi chú nhanh, Check-in, Mở ghi chú. Câu lệnh Siri bằng tiếng Anh (`en.lproj/AppShortcuts.strings`), tên trong Phím tắt bằng tiếng Việt
 - [x] Control Center / màn hình khoá / nút Action (`Not3Widgets/Controls.swift`): Thêm việc, Check-in, công tắc "Việc tiếp theo" (Bắt đầu → Xong qua hàng đợi `WidgetAction`)
 - [x] Spotlight (`Services/SpotlightIndexer.swift`): ghi chú + việc đang mở, chỉ đánh chỉ mục lại mục đã đổi; chạm kết quả mở đúng note / task (task trong hộp chờ mở sheet sửa)
+
+**Giai đoạn 5 — Ứng dụng của Apple** (đang làm)
+
+- [x] Màn Cài đặt → **Ứng dụng của Apple**: Lịch, Lời nhắc, Sức khỏe, Gợi ý nhật ký, Bộ lọc Focus; mỗi mục có màn riêng, icon vẽ theo app gốc của Apple
+- [x] Lịch: chọn lịch được đọc, mặc định "Ghi kế hoạch vào lịch"
+- [x] Lời nhắc (`RemindersService`): đến hạn hôm nay → việc, chưa có ngày → Hộp chờ (tuỳ chọn), tick hai chiều (bên sửa sau thắng), xoá lời nhắc → huỷ việc, lời nhắc tick trong app Lời nhắc → Nhật ký; chọn danh sách
+- [x] Sức khỏe (`HealthService`, chỉ đọc): bài tập ("Chạy bộ 32 phút · 5,1 km"), chánh niệm, đạt mục tiêu bước → việc đã làm có icon trái tim; giấc ngủ đêm qua (gộp iPhone + Watch) vào Nhật ký; mục Sức khỏe trong Tổng kết tuần
+- [x] Gợi ý nhật ký (`JournalSuggestions`): nút "Thêm khoảnh khắc" ở Buổi sáng → picker iOS → việc đã làm + Nhật ký
+- [x] Bộ lọc Focus (`TaskFocusFilter`): chọn loại việc cho từng Focus, lọc Hôm nay + widget
+- [ ] State of Mind: ghi cảm nhận check-in vào app Sức khỏe
 
 Những mục cần bạn cung cấp hoặc quyết định nằm trong [`CAN_BO_SUNG.md`](CAN_BO_SUNG.md).

@@ -13,6 +13,7 @@ enum TaskActions {
     static func setDone(_ task: TaskItem, _ done: Bool, serverPushActive: Bool) async {
         task.status = done ? .done : .todo
         if done { task.reopenedAt = nil; task.reopenedReason = nil }
+        RemindersService.shared.pushCompletion(of: task)
         if done {
             NotificationService.cancelReminder(for: task.id)
         } else {

@@ -402,9 +402,10 @@ final class SupabaseService {
                 .limit(300)
                 .execute()
                 .value
-            let calendar = ExternalSource.calendar.rawValue
+            // Only server sources: Calendar and the Apple modules are read on device.
+            let serverSources = ExternalSource.server.map(\.rawValue)
             let local = try context.fetch(FetchDescriptor<ExternalItem>(predicate: #Predicate {
-                $0.sourceRaw != calendar
+                serverSources.contains($0.sourceRaw)
             }))
             var byKey = Dictionary(local.map { ("\($0.sourceRaw)|\($0.externalId)", $0) }, uniquingKeysWith: { a, _ in a })
             for row in rows {

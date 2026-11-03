@@ -18,6 +18,8 @@ struct WeeklySummaryView: View {
     @State private var selectedDay: Int?
     @State private var selectedCell: (day: Int, hour: Int)?
     @State private var byCount = false
+    /// Sức khỏe module (on device): one entry per day, empty when off.
+    @State private var health: [HealthService.Day] = []
 
     @State private var summary: WeeklySummaryRecord?
     @State private var question = ""
@@ -35,6 +37,9 @@ struct WeeklySummaryView: View {
             highlightsSection
             heatSection
             categorySection
+            if health.contains(where: { $0 != HealthService.Day() }) {
+                healthSection
+            }
             historySection
             aiSection
             askSection
@@ -54,6 +59,7 @@ struct WeeklySummaryView: View {
         let lastWeek = DayClock.daysOfWeek(DayClock.calendar.date(byAdding: .day, value: -7, to: weekStart) ?? weekStart)
         snapshot = await ActivityLoader.load(days: days, in: context, force: force)
         isLoading = false
+        health = await HealthService.shared.week(days)
         previous = await ActivityLoader.load(days: lastWeek, in: context, force: force)
         summary = await supabase.fetchWeeklySummary(weekStart: weekStart)
     }
@@ -381,12 +387,47 @@ struct WeeklySummaryView: View {
         }
     }
 
+    // MARK: Sức khỏe — sleep, steps, workouts (read on device, never uploaded)
+
+    private var healthSection: some View {
+        let slept = health.map(\.sleepMinutes).filter { $0 > 0 }
+        let walked = health.map(\.steps).filter { $0 > 0 }
+        let workouts = health.reduce(0) { $0 + $1.workouts }
+        let workoutMinutes = health.reduce(0) { $0 + $1.workoutMinutes }
+        let goal = HealthService.stepGoal
+        return Section {
+            LabeledContent("Ngủ trung bình", value: slept.isEmpty ? "Chưa có" : HealthService.hoursText(slept.reduce(0, +) / slept.count))
+            LabeledContent("Bước mỗi ngày", value: walked.isEmpty ? "Chưa có" : (walked.reduce(0, +) / walked.count).formatted(.number.locale(Locale(identifier: "vi_VN"))))
+            LabeledContent("Ngày đạt mục tiêu bước", value: "\(health.filter { $0.steps >= goal }.count)/\(walked.count)")
+            LabeledContent("Vận động", value: workouts == 0 ? "Chưa có" : "\(workouts) bài · \(ActivityStyle.duration(workoutMinutes))")
+            if let short = shortestNight {
+                Text("Ngủ ít nhất vào \(short)")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("Sức khỏe", systemImage: "heart.fill")
+        } footer: {
+            Text("Đọc từ app Sức khỏe và tính trên iPhone này, không gửi lên server hay AI.")
+        }
+    }
+
+    /// "Thứ Năm (5 giờ 40 phút)", when a night was clearly shorter than the rest.
+    private var shortestNight: String? {
+        let nights = health.enumerated().filter { $0.element.sleepMinutes > 0 }
+        guard nights.count >= 3, let low = nights.min(by: { $0.element.sleepMinutes < $1.element.sleepMinutes }) else { return nil }
+        let average = nights.reduce(0) { $0 + $1.element.sleepMinutes } / nights.count
+        guard average - low.element.sleepMinutes >= 60 else { return nil }
+        return "\(ActivityStyle.weekdayNames[low.offset]) (\(HealthService.hoursText(low.element.sleepMinutes)))"
+    }
+
     private var sourcesSection: some View {
         Section {
             sourceRow("Lịch", status: CalendarService.shared.isAuthorized ? "Đo chính xác" : "Chưa cấp quyền", ok: CalendarService.shared.isAuthorized)
             sourceRow("Jira log work", status: connected("jira") ? "Đo chính xác" : "Chưa kết nối", ok: connected("jira"))
             sourceRow("Việc Not3", status: "Bấm giờ", ok: true)
             sourceRow("GitHub", status: connected("github") ? "Ước tính" : "Chưa kết nối", ok: false)
+            sourceRow("Sức khỏe", status: LocalModule.isEnabled(.health) ? "Trên iPhone" : "Chưa bật", ok: LocalModule.isEnabled(.health))
         } header: {
             Text("Nguồn dữ liệu")
         } footer: {

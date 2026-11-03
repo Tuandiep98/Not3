@@ -78,7 +78,7 @@ extension WidgetHeader where Trailing == EmptyView {
     }
 }
 
-/// GitHub / Jira mark (vector assets shared with the app), SF Symbol for Calendar.
+/// GitHub / Jira mark (vector assets shared with the app), SF Symbols for the Apple sources.
 struct SourceMark: View {
     let source: String?
     var size: CGFloat = 12
@@ -89,6 +89,9 @@ struct SourceMark: View {
             case "github": Image("logo-github").resizable().scaledToFit().foregroundStyle(.primary)
             case "jira": Image("logo-jira").resizable().scaledToFit().foregroundStyle(Color(light: 0x0052CC, dark: 0x579DFF))
             case "calendar": Image(systemName: "calendar").resizable().scaledToFit().foregroundStyle(.red)
+            case "reminders": Image(systemName: "checklist").resizable().scaledToFit().foregroundStyle(.blue)
+            case "health": Image(systemName: "heart.fill").resizable().scaledToFit().foregroundStyle(Color(hex: 0xFF2D55))
+            case "journal": Image(systemName: "book.closed.fill").resizable().scaledToFit().foregroundStyle(Color(hex: 0x8E6CEF))
             default: Image(systemName: "checkmark.circle").resizable().scaledToFit().foregroundStyle(.secondary)
             }
         }

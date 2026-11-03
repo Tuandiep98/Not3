@@ -13,6 +13,7 @@ Tổng quan nhanh:
 | D   | DeepSeek API key                                                  | Tài khoản platform.deepseek.com      | 5 phút    |
 | E   | Kiểm thử trên máy thật, iOS 18, CI                                | iPhone, GitHub                       | 1 giờ     |
 | F   | Quyết định sản phẩm                                               | —                                    | tuỳ bạn   |
+| N   | Capability HealthKit + Journaling Suggestions, thử trên iPhone    | Apple Developer, iPhone              | 20 phút   |
 
 ---
 
@@ -401,7 +402,7 @@ Build lại app lên máy (bản mới có quyền iCloud + Lịch), rồi:
 
 | Thử | Mong đợi |
 | --- | --- |
-| Cài đặt → Lịch iOS → **Cấp quyền** | "Đã cấp quyền"; Hôm nay → *Buổi sáng* hiện các sự kiện lịch hôm nay |
+| Cài đặt → Lịch → **Cấp quyền** | "Đã cấp quyền"; Hôm nay → *Buổi sáng* hiện các sự kiện lịch hôm nay |
 | Check-in → chọn việc + giờ, bật **Thêm vào Lịch** → Lưu | App Lịch có lịch **Not3** với sự kiện đúng giờ |
 | Trong app Lịch, kéo sự kiện đó sang giờ khác | Mở Not3: task đổi giờ theo, nhắc giờ dời theo |
 | Xoá sự kiện đó trong app Lịch | Task chuyển "Đã huỷ" |
@@ -490,6 +491,34 @@ Hai target mới: `com.tuandiep.not3.watchkitapp` (app) và `com.tuandiep.not3.w
 - Cài Not3 lên iPhone → app **Watch** trên iPhone → Not3 → **Cài đặt**. Mở Not3 trên iPhone một lần để gửi dữ liệu sang.
 - Trên đồng hồ: tích một việc → iPhone và widget cập nhật (ngay nếu iPhone ở gần; nếu không thì ở lần kết nối sau).
 - Mặt đồng hồ: nhấn giữ → Sửa → Complication → Not3 → *Tuần này* / *Việc tiếp theo*.
+
+## N. Ứng dụng của Apple — Lời nhắc, Sức khỏe, Gợi ý nhật ký, Bộ lọc Focus
+
+Code đã có (Cài đặt → **Ứng dụng của Apple**). Mỗi mục tắt sẵn, người dùng tự bật và tự cấp quyền. Dữ liệu chỉ đọc và xử lý trên iPhone.
+
+### - [ ] N1. Bật capability cho App ID
+
+App mới xin thêm 2 entitlement (`project.yml`): **HealthKit** và **Journaling Suggestions** (`com.apple.developer.journal.allow`).
+
+1. [developer.apple.com/account/resources/identifiers](https://developer.apple.com/account/resources/identifiers/list) → `com.tuandiep.not3` → tick **HealthKit** và **Journaling Suggestions** → **Save**.
+2. Chạy lại `xcodegen`, mở Xcode → target Not3 → **Signing & Capabilities**: hai mục mới hiện ra, không báo lỗi provisioning. Xcode Cloud dùng ký tự động nên cũng cần bước 1.
+3. Nếu Xcode báo sai khoá entitlement Journaling Suggestions: thêm capability bằng nút **+ Capability** trong Xcode, rồi chép đúng khoá / giá trị Xcode sinh ra vào `project.yml`. Gửi lỗi cho mình nếu cần.
+
+### - [ ] N2. Thử trên iPhone
+
+| Thử | Mong đợi |
+| --- | --- |
+| Cài đặt → Lời nhắc → **Bật** → cho phép | Lời nhắc đến hạn hôm nay (cả quá hạn) thành việc ở Hôm nay |
+| Tick việc đó trong Not3 | Lời nhắc trong app Lời nhắc cũng được đánh dấu xong |
+| Tick một lời nhắc khác trong app Lời nhắc | Mục ✓ hiện ở Buổi sáng / Nhật ký; nếu là việc đã nhập thì việc tự xong |
+| Xoá lời nhắc đã nhập | Việc chuyển "Đã huỷ" |
+| Cài đặt → Sức khỏe → **Bật** → cho phép | Bài tập, chánh niệm hôm nay hiện ở Buổi sáng với icon trái tim; đạt mục tiêu bước → "Đạt 8.000 bước"; Nhật ký có dòng "Ngủ …" |
+| Tổng kết tuần | Có mục **Sức khỏe**: ngủ trung bình, bước mỗi ngày, số ngày đạt mục tiêu, vận động |
+| Cài đặt → Gợi ý nhật ký → **Bật** → Hôm nay → **Thêm khoảnh khắc** | Picker của iOS mở; chọn một khoảnh khắc → thành mục trong Nhật ký |
+| Cài đặt iOS → Tập trung → Làm việc → Bộ lọc Focus → Not3 → chọn "Công việc" → bật Focus | Hôm nay và widget chỉ còn việc Công việc, dưới danh sách có dòng "Focus đang lọc" |
+| Cài đặt → Lịch → tắt một lịch | Sự kiện của lịch đó biến khỏi Buổi sáng sau khi quay lại |
+
+Gợi ý nhật ký không có trên simulator và iPad.
 
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 

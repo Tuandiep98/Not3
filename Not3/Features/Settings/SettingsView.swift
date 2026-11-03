@@ -20,6 +20,10 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.aiReadsIntegrations) private var aiReadsIntegrations = true
     @AppStorage(SettingsKey.appLock) private var appLock = false
     @AppStorage(SettingsKey.appLockDelay) private var appLockDelay = 60
+    @AppStorage(LocalModule.enabledKey(.reminders)) private var remindersOn = false
+    @AppStorage(LocalModule.enabledKey(.health)) private var healthOn = false
+    @AppStorage(LocalModule.enabledKey(.journal)) private var journalOn = false
+    @AppStorage(FocusFilterState.categoriesKey) private var focusCategoriesRaw = ""
     @State private var exportURL: URL?
     @State private var isExporting = false
 
@@ -49,6 +53,17 @@ struct SettingsView: View {
 
             Section {
                 calendarRow
+                remindersRow
+                healthRow
+                journalRow
+                NavigationLink { FocusFilterInfoView() } label: { focusRow }
+            } header: {
+                Text("Ứng dụng của Apple")
+            } footer: {
+                Text("Đọc trên iPhone, bật từng mục khi cần. Lời nhắc, Sức khỏe và Gợi ý nhật ký không gửi lên server hay AI.")
+            }
+
+            Section {
                 integrationRow(.github, title: "GitHub")
                 integrationRow(.jira, title: "Jira Cloud")
                 if !supabase.integrations.isEmpty {
@@ -68,7 +83,7 @@ struct SettingsView: View {
                     .disabled(isSyncingIntegrations)
                 }
             } header: {
-                Text("Dữ liệu đã kết nối")
+                Text("Dịch vụ đã kết nối")
             } footer: {
                 Text("Chỉ xin quyền đọc. Dữ liệu được kéo về 30 phút trước giờ check-in. Ngắt kết nối sẽ xoá token và dữ liệu của nguồn đó. Bitbucket sẽ có ở bản sau.")
             }
@@ -223,24 +238,130 @@ struct SettingsView: View {
 
     // MARK: Connected data
 
+    @ViewBuilder
     private var calendarRow: some View {
-        let status = calendar.status
-        return ConnectionRow(
-            source: .calendar,
-            title: "Lịch iOS",
-            subtitle: status == .fullAccess ? "Đọc lịch hôm nay · ghi kế hoạch chiều" : "Chưa cấp quyền"
-        ) {
-            switch status {
-            case .fullAccess:
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).accessibilityLabel("Đã cấp quyền")
-            case .denied, .restricted, .writeOnly:
-                rowButton("Mở Cài đặt") {
-                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                }
-            default:
+        switch calendar.status {
+        case .fullAccess:
+            NavigationLink { CalendarSettingsView() } label: {
+                ConnectionRow(source: .calendar, title: "Lịch", subtitle: "Đọc lịch hôm nay · ghi kế hoạch chiều") { EmptyView() }
+            }
+        case .denied, .restricted, .writeOnly:
+            ConnectionRow(source: .calendar, title: "Lịch", subtitle: "Chưa có toàn quyền", subtitleIsWarning: true) {
+                rowButton("Mở Cài đặt") { openAppSettings() }
+            }
+        default:
+            ConnectionRow(source: .calendar, title: "Lịch", subtitle: "Chưa cấp quyền") {
                 rowButton("Cấp quyền") { Task { await calendar.requestAccess() } }
             }
         }
+    }
+
+    @ViewBuilder
+    private var remindersRow: some View {
+        let status = RemindersService.shared.status
+        if remindersOn && status == .fullAccess {
+            NavigationLink { RemindersSettingsView() } label: {
+                ConnectionRow(source: .reminders, title: "Lời nhắc", subtitle: "Việc đến hạn · tick hai chiều") { EmptyView() }
+            }
+        } else if status == .denied || status == .restricted || status == .writeOnly {
+            ConnectionRow(source: .reminders, title: "Lời nhắc", subtitle: "Chưa có toàn quyền", subtitleIsWarning: remindersOn) {
+                rowButton("Mở Cài đặt") { openAppSettings() }
+            }
+        } else {
+            ConnectionRow(source: .reminders, title: "Lời nhắc", subtitle: "Lời nhắc đến hạn thành việc hôm nay") {
+                moduleButton(.reminders) {
+                    guard await RemindersService.shared.requestAccess() else { return false }
+                    LocalModule.setEnabled(.reminders, true)
+                    await RemindersService.shared.refresh(in: context)
+                    return true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var healthRow: some View {
+        if !HealthService.shared.isAvailable {
+            ConnectionRow(source: .health, title: "Sức khỏe", subtitle: "Không có trên thiết bị này") { EmptyView() }
+        } else if healthOn {
+            NavigationLink { HealthSettingsView() } label: {
+                ConnectionRow(source: .health, title: "Sức khỏe", subtitle: "Vận động, chánh niệm, giấc ngủ") { EmptyView() }
+            }
+        } else {
+            ConnectionRow(source: .health, title: "Sức khỏe", subtitle: "Bài tập, bước chân thành việc đã làm") {
+                moduleButton(.health) {
+                    guard await HealthService.shared.requestAccess() else { return false }
+                    LocalModule.setEnabled(.health, true)
+                    await HealthService.shared.refresh(in: context)
+                    return true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var journalRow: some View {
+        if !JournalSuggestions.isSupported {
+            ConnectionRow(source: .journal, title: "Gợi ý nhật ký", subtitle: "Chỉ có trên iPhone") { EmptyView() }
+        } else if journalOn {
+            NavigationLink { JournalSuggestionsSettingsView() } label: {
+                ConnectionRow(source: .journal, title: "Gợi ý nhật ký", subtitle: "Chọn khoảnh khắc ở Hôm nay") { EmptyView() }
+            }
+        } else {
+            ConnectionRow(source: .journal, title: "Gợi ý nhật ký", subtitle: "Khoảnh khắc bạn chọn vào Nhật ký") {
+                moduleButton(.journal) {
+                    LocalModule.setEnabled(.journal, true)
+                    return true
+                }
+            }
+        }
+    }
+
+    /// Focus is a system setting, not a data source: Settings-style indigo tile with the moon.
+    private var focusRow: some View {
+        let categories = FocusFilterState.decode(focusCategoriesRaw)
+        return HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 29 * 0.225, style: .continuous)
+                .fill(Color(hex: 0x5E5CE6))
+                .frame(width: 29, height: 29)
+                .overlay { Image(systemName: "moon.fill").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white) }
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Bộ lọc Focus")
+                Text(categories.isEmpty ? "Lọc việc theo Focus đang bật" : "Đang lọc: \(categories.joined(separator: ", "))")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "Bật": asks for the module's permission (system sheet), then turns it on.
+    private func moduleButton(_ source: ExternalSource, enable: @escaping () async -> Bool) -> some View {
+        Group {
+            if busyProvider == source {
+                ProgressView()
+            } else {
+                rowButton("Bật") {
+                    busyProvider = source
+                    Task {
+                        defer { busyProvider = nil }
+                        if await enable() {
+                            JournalService.updateToday(in: context)
+                            WidgetBridge.publishSoon()
+                        } else if source == .reminders {
+                            errorMessage = "Not3 cần toàn quyền Lời nhắc để đọc và tick lời nhắc. Bật trong Cài đặt → Not3 → Lời nhắc."
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
     }
 
     @ViewBuilder

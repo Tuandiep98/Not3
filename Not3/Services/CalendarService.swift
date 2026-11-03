@@ -57,8 +57,7 @@ final class CalendarService {
         guard isAuthorized else { return }
         let start = DayClock.startOfDay(now)
         let end = DayClock.endOfDay(now)
-        let ownId = UserDefaults.standard.string(forKey: Self.calendarIdKey)
-        let calendars = store.calendars(for: .event).filter { $0.calendarIdentifier != ownId }
+        let calendars = readableCalendars()
         guard !calendars.isEmpty else { return }
         let events = store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: calendars))
             .filter { !$0.isAllDay && $0.status != .canceled }
@@ -87,8 +86,7 @@ final class CalendarService {
     /// declined events, and Not3's own plan calendar (those are tasks, counted separately).
     func meetings(from start: Date, to end: Date) -> [ActivityInput] {
         guard isAuthorized else { return [] }
-        let ownId = UserDefaults.standard.string(forKey: Self.calendarIdKey)
-        let calendars = store.calendars(for: .event).filter { $0.calendarIdentifier != ownId }
+        let calendars = readableCalendars()
         guard !calendars.isEmpty else { return [] }
         return store.events(matching: store.predicateForEvents(withStart: start, end: end, calendars: calendars))
             .filter { event in
@@ -100,6 +98,21 @@ final class CalendarService {
                 ActivityInput(start: $0.startDate, end: $0.endDate, kind: .meeting,
                               title: $0.title ?? "Sự kiện", precision: .measured, source: .calendar)
             }
+    }
+
+    /// Calendars offered in Settings → Lịch (Not3's own plan calendar is never read back).
+    func calendars() -> [EKCalendar] {
+        guard isAuthorized else { return [] }
+        let ownId = UserDefaults.standard.string(forKey: Self.calendarIdKey)
+        return store.calendars(for: .event)
+            .filter { $0.calendarIdentifier != ownId }
+            .sorted { ($0.source?.title ?? "", $0.title) < ($1.source?.title ?? "", $1.title) }
+    }
+
+    /// Calendars the user left on in Settings → Lịch.
+    private func readableCalendars() -> [EKCalendar] {
+        let excluded = LocalModule.excluded(.calendar)
+        return calendars().filter { !excluded.contains($0.calendarIdentifier) }
     }
 
     private static func externalId(for event: EKEvent) -> String {

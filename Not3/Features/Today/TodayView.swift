@@ -11,6 +11,10 @@ struct TodayView: View {
     @Query private var checkIns: [CheckIn]
     @Query(sort: \Folder.sortOrder) private var folders: [Folder]
 
+    @AppStorage(FocusFilterState.categoriesKey) private var focusCategoriesRaw = ""
+    @AppStorage(FocusFilterState.showUncategorizedKey) private var focusShowsUncategorized = true
+    @AppStorage(LocalModule.enabledKey(.journal)) private var journalModuleOn = false
+
     @State private var now = Date()
     /// Row flashed after opening a notification / widget link for it.
     @State private var highlighted: UUID?
@@ -69,13 +73,16 @@ struct TodayView: View {
 
             Section("Buổi sáng") {
                 if morningRows.isEmpty {
-                    Text("Chưa có gì từ GitHub, Jira hay Lịch. Bạn có thể thêm trong lúc check-in.")
+                    Text("Chưa có gì từ GitHub, Jira, Lịch hay các nguồn đã bật. Bạn có thể thêm trong lúc check-in.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(morningRows) { row in
                         TimelineRow(row: row)
                     }
+                }
+                if journalModuleOn && JournalSuggestions.isSupported {
+                    MomentPickerButton()
                 }
             }
             .headerProminence(.increased)
@@ -142,6 +149,10 @@ struct TodayView: View {
                         }
                         .accessibilityLabel("Việc tồn từ hôm trước")
                     }
+                }
+            } footer: {
+                if !focusCategories.isEmpty {
+                    Label("Focus đang lọc: \(focusCategories.joined(separator: ", "))", systemImage: "moon.fill")
                 }
             }
             .headerProminence(.increased)
@@ -328,8 +339,12 @@ struct TodayView: View {
 
     /// Open tasks from any day (carried over until done) + tasks finished today. See `TodayList`.
     private var todayTasks: [TaskItem] {
-        TodayList.tasks(tasks, now: now)
+        // A Focus Filter ("Làm việc" → Công việc only) narrows the list while that Focus is on.
+        FocusFilterState.apply(TodayList.tasks(tasks, now: now), categories: focusCategories,
+                               showUncategorized: focusShowsUncategorized)
     }
+
+    private var focusCategories: [String] { FocusFilterState.decode(focusCategoriesRaw) }
 
     private var doneCount: Int { todayTasks.filter { $0.status == .done }.count }
 

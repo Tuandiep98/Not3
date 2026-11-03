@@ -64,12 +64,20 @@ enum ChipGroup: String, Codable, Sendable {
 
 enum ExternalSource: String, Codable, Sendable {
     case calendar, github, jira
+    /// Apple modules read on device only (README §11): never uploaded, never pulled from the server.
+    case reminders, health, journal
+
+    /// Synced through the server (`external_items`); the rest are read on this device.
+    static let server: [ExternalSource] = [.github, .jira]
 
     var label: String {
         switch self {
         case .calendar: "Lịch"
         case .github: "GitHub"
         case .jira: "Jira"
+        case .reminders: "Lời nhắc"
+        case .health: "Sức khỏe"
+        case .journal: "Gợi ý nhật ký"
         }
     }
 
@@ -78,6 +86,9 @@ enum ExternalSource: String, Codable, Sendable {
         case .calendar: "calendar"
         case .github: "arrow.triangle.branch"
         case .jira: "ticket"
+        case .reminders: "checklist"
+        case .health: "heart.fill"
+        case .journal: "book.closed.fill"
         }
     }
 
@@ -227,6 +238,8 @@ final class TaskItem {
     /// Server card (`cards`): two-line progress summary and every PR / ticket of this work.
     var cardSummary: String?
     var cardItemsJSON: String?
+    /// Imported from Apple Reminders (`calendarItemExternalIdentifier`): ticking either side ticks the other.
+    var reminderId: String?
 
     var cardItems: [CardItem] {
         guard let data = cardItemsJSON?.data(using: .utf8) else { return [] }
@@ -377,7 +390,7 @@ final class Chip {
     }
 }
 
-/// Items pulled from GitHub / Jira / Calendar (filled by sync in phase 3).
+/// Items pulled from GitHub / Jira / Calendar, and read on device from Reminders / Health / Journaling Suggestions.
 @Model
 final class ExternalItem {
     var id: UUID = UUID()

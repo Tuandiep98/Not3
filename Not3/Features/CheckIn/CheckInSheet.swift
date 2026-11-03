@@ -278,7 +278,8 @@ struct CheckInSheet: View {
 
     private func todaysExternalTitles(now: Date = Date()) -> [String] {
         let start = DayClock.startOfDay(now)
-        return externalItems.filter { $0.occurredAt >= start && $0.occurredAt <= now }.map(\.title)
+        // Sleep is context for the journal, not something "done this morning".
+        return externalItems.filter { $0.occurredAt >= start && $0.occurredAt <= now && $0.kind != "sleep" }.map(\.title)
     }
 
     /// New morning items (Calendar just re-read, server sync) appear unconfirmed: tap to confirm.
@@ -341,7 +342,7 @@ struct CheckInSheet: View {
                 result.append(AfternoonSuggestion(title: title, category: task.category, source: task.source,
                                                   durationMinutes: task.durationMinutes, taskId: task.id))
             } else if let item = externalItems.first(where: { $0.title == title && $0.occurredAt >= start }),
-                      item.source != .calendar {
+                      ExternalSource.server.contains(item.source) {
                 result.append(AfternoonSuggestion(title: title, category: ChipStore.workCategoryName(chips), source: .integration,
                                                   externalKey: "\(item.sourceRaw)|\(item.externalId)"))
             } else {

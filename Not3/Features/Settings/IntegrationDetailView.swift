@@ -141,7 +141,7 @@ struct IntegrationDetailView: View {
                 } label: {
                     LabeledContent("Nhãn tính là xong", value: rules.labels.isEmpty ? "Không" : "\(rules.labels.count)")
                 }
-            case .calendar:
+            default:
                 EmptyView()
             }
         } header: {

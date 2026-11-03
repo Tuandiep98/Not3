@@ -2,7 +2,8 @@ import Foundation
 import SwiftData
 
 /// "Nhật ký hôm nay" (README §12): one note per day in the "Nhật ký" folder — a one-line summary,
-/// then Sáng / Chiều with finished tasks (✓), meetings (◷) and GitHub / Jira activity (•). The app only rewrites the managed block
+/// then Sáng / Chiều with finished tasks and reminders (✓), meetings (◷) and GitHub / Jira / Sức khỏe /
+/// Gợi ý nhật ký activity (•). The app only rewrites the managed block
 /// between the two markers — anything the user types outside it is never touched.
 @MainActor
 enum JournalService {
@@ -76,6 +77,8 @@ enum JournalService {
                 guard item.occurredAt <= now else { return nil }
                 return Entry(time: item.occurredAt, text: item.title, kind: .meeting)
             }
+            // Ticked in Apple Reminders: done work, like a task.
+            if item.source == .reminders { return Entry(time: item.occurredAt, text: item.title, kind: .task) }
             return Entry(time: item.occurredAt, text: item.title, kind: .activity(item.source))
         }
         return entries.sorted { $0.time < $1.time }
@@ -89,7 +92,7 @@ enum JournalService {
         if tasks > 0 { parts.append("\(tasks) việc xong") }
         if meetings > 0 { parts.append("\(meetings) cuộc họp") }
         var first = true
-        for source in [ExternalSource.github, .jira] {
+        for source in [ExternalSource.github, .jira, .health, .journal] {
             let count = entries.filter { $0.kind == .activity(source) }.count
             guard count > 0 else { continue }
             parts.append(first ? "\(count) hoạt động \(source.label)" : "\(count) \(source.label)")

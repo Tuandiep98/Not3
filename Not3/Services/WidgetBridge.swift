@@ -118,7 +118,8 @@ enum WidgetBridge {
         let tasks = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
         let checkIn = CheckInService.todaysCheckIn(context, now: now)
 
-        // Morning: what was synced or finished today before the check-in (Calendar, GitHub, Jira, ticks).
+        // Morning: what was synced or finished today before the check-in (Calendar, GitHub, Jira,
+        // Apple modules, ticks).
         let items = (try? context.fetch(FetchDescriptor<ExternalItem>(predicate: #Predicate {
             $0.occurredAt >= start && $0.occurredAt < end
         }))) ?? []
@@ -132,7 +133,8 @@ enum WidgetBridge {
         }
         morning.sort { $0.time < $1.time }
 
-        let today = TodayList.tasks(tasks, now: now).prefix(20).map { task in
+        // Same list as "Hôm nay", including an active Focus Filter.
+        let today = FocusFilterState.apply(TodayList.tasks(tasks, now: now)).prefix(20).map { task in
             WidgetSnapshot.TaskRow(
                 id: task.id,
                 title: task.title,
