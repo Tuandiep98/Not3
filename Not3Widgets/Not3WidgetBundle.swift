@@ -8,6 +8,9 @@ struct Not3WidgetBundle: WidgetBundle {
         TodayWidget()
         WeekWidget()
         FolderWidget()
+        NewTaskControl()
+        CheckInControl()
+        NextTaskControl()
     }
 }
 

@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftData
 import SwiftUI
 import UIKit
@@ -21,6 +22,13 @@ struct Not3App: App {
                 .tint(Theme.accentInk)
                 .task { await AppLifecycle.onLaunch() }
                 .onOpenURL { Router.shared.open($0) }
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    // Spotlight result → the note / task it points to.
+                    if let id = activity.userInfo?[CSSearchableItemActivityIdentifier] as? String,
+                       let url = SpotlightIndexer.deepLink(for: id) {
+                        Router.shared.open(url)
+                    }
+                }
         }
         .modelContainer(Persistence.shared)
         .onChange(of: scenePhase) { _, phase in
@@ -46,6 +54,7 @@ enum AppLifecycle {
         Persistence.mergeDuplicateFolders(context)
         CalendarService.shared.startObserving()
         WidgetBridge.startObserving()
+        SpotlightIndexer.startObserving()
         NotificationService.registerCategories()
         // Permission is asked in context (first check-in save), not on first launch.
         UIApplication.shared.registerForRemoteNotifications()

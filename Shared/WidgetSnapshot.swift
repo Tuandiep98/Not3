@@ -22,6 +22,9 @@ enum WidgetKind {
     static let today = "Not3Today"
     static let week = "Not3Week"
     static let folder = "Not3Folder"
+    static let newTaskControl = "Not3NewTaskControl"
+    static let checkInControl = "Not3CheckInControl"
+    static let nextTaskControl = "Not3NextTaskControl"
 }
 
 struct WidgetSnapshot: Codable, Equatable, Sendable {
@@ -84,6 +87,8 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
 
     var meaningfulDays: Int { week.filter { $0 }.count }
     var openTasks: [TaskRow] { tasks.filter { !$0.isDone } }
+    /// "Việc tiếp theo": the one in progress, else the first open one.
+    var nextTask: TaskRow? { openTasks.first { $0.status == "doing" } ?? openTasks.first }
 
     func checkInTime(on date: Date) -> Date {
         Calendar.current.date(bySettingHour: checkInHour, minute: checkInMinute, second: 0, of: date) ?? date
@@ -143,6 +148,10 @@ enum DeepLink {
     static let today = URL(string: "not3://today")!
     static let checkIn = URL(string: "not3://checkin")!
     static let summary = URL(string: "not3://summary")!
+    static let backlog = URL(string: "not3://backlog")!
+    static let newTask = URL(string: "not3://new-task")!
+
+    static func task(_ id: UUID) -> URL { URL(string: "not3://task/\(id.uuidString)")! }
 
     static func folder(_ id: UUID) -> URL { URL(string: "not3://folder/\(id.uuidString)")! }
     static func note(_ id: UUID) -> URL { URL(string: "not3://note/\(id.uuidString)")! }

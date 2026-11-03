@@ -442,6 +442,17 @@ Thử:
 - Vuốt một việc → **Hộp chờ** → việc biến mất khỏi Hôm nay và widget, hiện ở Thư mục → Hộp chờ. Lúc check-in, việc này nằm trong "Gợi ý".
 - Cài đặt → **Việc lặp lại**: tắt để dừng tạo việc mới.
 
+## J. Siri, Phím tắt, Control Center, Spotlight
+
+### - [ ] J1. Thử trên máy
+
+- **Siri (tiếng Anh):** "Add a task in Not3", "What's left today in Not3", "Start my next task in Not3", "Complete *tên việc* in Not3", "Quick note in Not3", "Check in with Not3". Lần đầu sau khi cài, mở app một lần để Siri học tên việc.
+- **Phím tắt:** app Phím tắt → Not3 có sẵn các thao tác. Gán "Thêm việc" cho **nút Action**: Cài đặt → Nút Tác vụ → Phím tắt.
+- **Control Center:** vuốt xuống → **+** → Thêm điều khiển → Not3 → *Thêm việc*, *Check-in*, *Việc tiếp theo*. Màn hình khoá: dùng được ở 2 ô dưới cùng.
+- **Spotlight:** vuốt xuống ở màn hình chính, gõ tiêu đề một ghi chú hoặc một việc.
+
+Lưu ý: app có thêm bản địa hoá `en` (chỉ chứa câu lệnh Siri). Nếu ngôn ngữ iPhone là tiếng Anh, một vài chữ của hệ thống trong app (nút trong DatePicker…) có thể hiện tiếng Anh.
+
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 
 - [ ] **F1. Kiếm tiền**: miễn phí + gói Pro (tích hợp, tổng kết AI) hay trả một lần? Ảnh hưởng tới giai đoạn 4 (StoreKit, giới hạn tính năng).

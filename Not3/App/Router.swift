@@ -42,8 +42,14 @@ final class Router {
         case "today":
             path = [.today]
         case "task":
-            path = [.today]
-            focusTaskId = id
+            // "Hộp chờ" items are not in "Hôm nay": open the backlog with the task's editor.
+            if let id, let task = TaskActions.task(id: id, in: context), task.isSomeday {
+                path = [.backlog]
+                taskEditor = .edit(id)
+            } else {
+                path = [.today]
+                focusTaskId = id
+            }
         case "checkin":
             openCheckIn()
         case "backlog":

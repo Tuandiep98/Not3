@@ -561,6 +561,8 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Deep link `not3://today | checkin | summary | folder/<id> | note/<id> | new-note`
 - [x] DEBUG: `-widgetGallery` (`-widgetGallery2`) vẽ mọi trạng thái widget trên simulator
 - [ ] Live Activity đếm ngược phiên (nút "Bắt đầu" hiện chỉ chuyển việc sang Đang làm)
-- [ ] App Intents / Siri, Control Center
+- [x] App Intents (`Not3/Intents/`): Thêm việc (giờ / thời lượng / hộp chờ), Đánh dấu xong, Bắt đầu việc tiếp theo, Hôm nay còn việc gì, Ghi chú nhanh, Check-in, Mở ghi chú. Câu lệnh Siri bằng tiếng Anh (`en.lproj/AppShortcuts.strings`), tên trong Phím tắt bằng tiếng Việt
+- [x] Control Center / màn hình khoá / nút Action (`Not3Widgets/Controls.swift`): Thêm việc, Check-in, công tắc "Việc tiếp theo" (Bắt đầu → Xong qua hàng đợi `WidgetAction`)
+- [x] Spotlight (`Services/SpotlightIndexer.swift`): ghi chú + việc đang mở, chỉ đánh chỉ mục lại mục đã đổi; chạm kết quả mở đúng note / task (task trong hộp chờ mở sheet sửa)
 
 Những mục cần bạn cung cấp hoặc quyết định nằm trong [`CAN_BO_SUNG.md`](CAN_BO_SUNG.md).

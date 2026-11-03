@@ -1,0 +1,14 @@
+/* Siri phrases (Siri has no Vietnamese). Keys must match Not3/Intents/Not3Shortcuts.swift. */
+
+"Add a task in ${applicationName}" = "Add a task in ${applicationName}";
+"New task in ${applicationName}" = "New task in ${applicationName}";
+"What's left today in ${applicationName}" = "What's left today in ${applicationName}";
+"What's next in ${applicationName}" = "What's next in ${applicationName}";
+"Start my next task in ${applicationName}" = "Start my next task in ${applicationName}";
+"Start next task in ${applicationName}" = "Start next task in ${applicationName}";
+"Complete ${task} in ${applicationName}" = "Complete ${task} in ${applicationName}";
+"Mark a task done in ${applicationName}" = "Mark a task done in ${applicationName}";
+"Add a note in ${applicationName}" = "Add a note in ${applicationName}";
+"Quick note in ${applicationName}" = "Quick note in ${applicationName}";
+"Check in with ${applicationName}" = "Check in with ${applicationName}";
+"Open ${applicationName} check-in" = "Open ${applicationName} check-in";

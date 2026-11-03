@@ -38,6 +38,7 @@ enum WidgetBridge {
         snapshot.generatedAt = now
         snapshot.save()
         WidgetCenter.shared.reloadAllTimelines()
+        ControlCenter.shared.reloadAllControls()
     }
 
     // MARK: Actions from interactive widgets
