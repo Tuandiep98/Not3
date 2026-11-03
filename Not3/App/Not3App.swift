@@ -190,34 +190,44 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     /// In the app: FYI pushes go quietly to the list; a check-in already on screen is not repeated.
+    // Completion-handler variants, called back on the main thread: with the `async` variants a
+    // nonisolated method finishes on the cooperative pool, so iOS's completion handler ran off
+    // main and UIKit aborted (-[UIApplication _updateSnapshotAndStateRestorationWithAction:]).
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
         let content = notification.request.content
-        if content.interruptionLevel == .passive { return [.list] }
-        if content.categoryIdentifier == NotificationService.checkInCategory,
-           await MainActor.run(body: { Router.shared.isCheckInPresented }) {
-            return []
+        let passive = content.interruptionLevel == .passive
+        let category = content.categoryIdentifier
+        Task { @MainActor in
+            if passive { return completionHandler([.list]) }
+            if category == NotificationService.checkInCategory, Router.shared.isCheckInPresented {
+                return completionHandler([])
+            }
+            if category == NotificationService.shutdownCategory, Router.shared.isShutdownPresented {
+                return completionHandler([])
+            }
+            completionHandler([.banner, .sound, .list])
         }
-        if content.categoryIdentifier == NotificationService.shutdownCategory,
-           await MainActor.run(body: { Router.shared.isShutdownPresented }) {
-            return []
-        }
-        return [.banner, .sound, .list]
     }
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
         let action = response.actionIdentifier
         let content = response.notification.request.content
         let category = content.categoryIdentifier
         let taskId = (content.userInfo[NotificationService.taskIdKey] as? String).flatMap(UUID.init(uuidString:))
         let link = (content.userInfo[NotificationService.linkKey] as? String).flatMap(URL.init(string:))
         let external = (content.userInfo[NotificationService.urlKey] as? String).flatMap(URL.init(string:))
-        await handle(action: action, category: category, taskId: taskId, link: link, external: external)
+        Task { @MainActor in
+            await self.handle(action: action, category: category, taskId: taskId, link: link, external: external)
+            completionHandler()
+        }
     }
 
     @MainActor
