@@ -31,6 +31,10 @@ struct TodayView: View {
         }
         defer { router.focusTaskId = nil }
         guard todayTasks.contains(where: { $0.id == id }) else { return }
+        // Opened from a notification, this view was just pushed: scrolling the List before its
+        // collection view has loaded the rows traps (out-of-bounds index path). Let it lay out first.
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled, todayTasks.contains(where: { $0.id == id }) else { return }
         withAnimation(.snappy) { proxy.scrollTo(id, anchor: .center) }
         withAnimation(.easeIn(duration: 0.2)) { highlighted = id }
         try? await Task.sleep(for: .seconds(1.6))

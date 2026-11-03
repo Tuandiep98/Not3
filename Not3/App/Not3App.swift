@@ -226,8 +226,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             return
         }
         if action == NotificationService.openExternalAction {
+            // Back in the app, "Hôm nay" shows the task, as a tap on the body would.
+            if let target = link ?? taskId.flatMap({ URL(string: "not3://task/\($0.uuidString)") }) {
+                Router.shared.open(target)
+            }
             if let external { await UIApplication.shared.open(external) }
-            if let taskId { Router.shared.focusTaskId = taskId }
             return
         }
         if category == NotificationService.eveningCategory, let taskId {
