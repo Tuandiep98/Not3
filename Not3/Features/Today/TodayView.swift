@@ -40,9 +40,9 @@ struct TodayView: View {
     private var list: some View {
         List {
             Section {
-                checkInCard
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                if showsCheckInCard {
+                    checkInCard
+                }
             } header: {
                 Text(DayClock.longDate(now))
                     .font(.subheadline)
@@ -163,53 +163,137 @@ struct TodayView: View {
                 ToolbarItem(placement: .bottomBar) { Spacer() }
             }
             ToolbarItem(placement: .bottomBar) {
+                // Always reachable, also while the card is hidden (early check-in, editing the plan).
+                Button(todayCheckIn == nil ? "Check-in" : "Sửa kế hoạch check-in",
+                       systemImage: todayCheckIn == nil ? "sun.max" : "checkmark.circle") {
+                    router.isCheckInPresented = true
+                }
+            }
+            ToolbarItem(placement: .bottomBar) {
                 Button("Ghi chú mới", systemImage: "square.and.pencil") { createNote() }
             }
         }
         .onAppear { now = Date() }
+        .task {
+            // Minute tick: the check-in card appears, counts down and hides without leaving the screen.
+            while !Task.isCancelled {
+                let next = DayClock.calendar.nextDate(after: Date(), matching: DateComponents(second: 0),
+                                                      matchingPolicy: .nextTime) ?? Date().addingTimeInterval(60)
+                try? await Task.sleep(for: .seconds(max(1, next.timeIntervalSinceNow)))
+                withAnimation(.snappy) { now = Date() }
+            }
+        }
     }
 
     // MARK: Check-in card
 
+    /// Shown from this long before check-in time until it is done (a missed one stays all day).
+    private static let checkInLead: TimeInterval = 30 * 60
+    /// After checking in, the one-line summary stays this long, then the card hides.
+    private static let checkInDoneLinger: TimeInterval = 60 * 60
+
+    private var todayCheckIn: CheckIn? {
+        checkIns.first { $0.day == DayClock.startOfDay(now) && $0.mood != nil }
+    }
+
+    private var checkInTime: Date {
+        DayClock.at(hour: AppSettings.checkInHour, minute: AppSettings.checkInMinute, on: now)
+    }
+
+    private var showsCheckInCard: Bool {
+        if let done = todayCheckIn {
+            return now < done.createdAt.addingTimeInterval(Self.checkInDoneLinger)
+        }
+        return now >= checkInTime.addingTimeInterval(-Self.checkInLead)
+    }
+
     @ViewBuilder
     private var checkInCard: some View {
-        let checkIn = checkIns.first { $0.day == DayClock.startOfDay(now) }
-        let hour = AppSettings.checkInHour
-        let minute = AppSettings.checkInMinute
-        VStack(alignment: .leading, spacing: 6) {
-            Label(String(format: "Check-in %02d:%02d", hour, minute), systemImage: "clock")
-                .font(.footnote.weight(.semibold))
-                .foregroundStyle(Theme.accentInk)
-            if let checkIn, checkIn.mood != nil {
+        if let checkIn = todayCheckIn {
+            checkInDone(checkIn)
+        } else {
+            checkInPrompt
+        }
+    }
+
+    /// Due soon / now / missed: status, what is ready, one button.
+    private var checkInPrompt: some View {
+        let time = checkInTime
+        let minutesLeft = Int((time.timeIntervalSince(now) / 60).rounded(.up))
+        let minutesLate = Int(now.timeIntervalSince(time) / 60)
+        let title: String
+        let status: String
+        let isLate = minutesLate >= 15
+        if minutesLeft > 0 {
+            title = "Sắp đến giờ check-in"
+            status = "Còn \(minutesLeft) phút"
+        } else if !isLate {
+            title = "Đến giờ check-in"
+            status = "Mất khoảng 1 phút"
+        } else {
+            title = "Bạn chưa check-in hôm nay"
+            status = minutesLate < 60 ? "Trễ \(minutesLate) phút" : "Vẫn kịp chốt việc buổi chiều"
+        }
+        let ready = morningRows.isEmpty ? "Ghi lại buổi sáng, chốt việc chiều" : "\(morningRows.count) mục sáng đã gom sẵn"
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: isLate ? "clock.badge.exclamationmark.fill" : "sun.max.fill")
+                    .font(.title3)
+                    .foregroundStyle(isLate ? Color.white : Color.black)
+                    .frame(width: 40, height: 40)
+                    .background(isLate ? Color.orange : Theme.accent, in: .rect(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).font(.headline)
+                    Text("\(status) · \(ready)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Text(DayClock.time(time))
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(isLate ? Color.orange : Theme.accentInk)
+            }
+            .accessibilityElement(children: .combine)
+
+            Button {
+                router.isCheckInPresented = true
+            } label: {
+                Text(minutesLeft > 0 ? "Check-in sớm" : "Check-in ngay")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+            }
+            .appPrimaryButton()
+        }
+        .padding(.vertical, 6)
+    }
+
+    /// Done: one compact row with the plan, so the day's list moves up.
+    private func checkInDone(_ checkIn: CheckIn) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(.green)
+            VStack(alignment: .leading, spacing: 2) {
                 Text("Đã check-in · \(checkIn.mood?.label ?? "")")
-                    .font(.title3.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                 if let plan = todayTasks.first(where: { checkIn.afternoonTaskIds.contains($0.id) }),
                    let sentence = plan.ifThenSentence {
-                    Text(sentence).font(.subheadline).foregroundStyle(.secondary)
+                    Text(sentence)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
-                Button("Sửa kế hoạch") { router.isCheckInPresented = true }
-                    .font(.subheadline.weight(.semibold))
-                    .padding(.top, 4)
-            } else {
-                Text("Sáng nay bạn đã làm được gì?")
-                    .font(.title3.weight(.semibold))
-                Text(morningRows.isEmpty
-                     ? "Chạm vài chip để ghi lại buổi sáng và chốt việc buổi chiều."
-                     : "\(morningRows.count) mục đã được gom sẵn.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Button {
-                    router.isCheckInPresented = true
-                } label: {
-                    Text("Check-in ngay").font(.headline).frame(maxWidth: .infinity)
-                }
-                .appPrimaryButton()
-                .padding(.top, 10)
             }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button("Sửa") { router.isCheckInPresented = true }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Sửa kế hoạch check-in")
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.cardBackground, in: .rect(cornerRadius: Theme.cardRadius))
+        .frame(minHeight: Theme.minTouch)
     }
 
     // MARK: Data
