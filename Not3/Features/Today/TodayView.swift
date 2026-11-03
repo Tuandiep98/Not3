@@ -120,6 +120,13 @@ struct TodayView: View {
             } header: {
                 HStack {
                     Text("Việc hôm nay")
+                    if !todayTasks.isEmpty {
+                        Text("\(doneCount)/\(todayTasks.count) xong")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Spacer()
                     if carriedOverCount > 0 {
                         Menu {
                             Button("Dời \(carriedOverCount) việc tồn sang mai", systemImage: "arrow.turn.up.right") {
@@ -129,17 +136,11 @@ struct TodayView: View {
                                 TaskActions.backlogAll(todayTasks)
                             }
                         } label: {
+                            // Trailing in its touch area: the icon lines up with the section's right edge.
                             Image(systemName: "ellipsis.circle")
-                                .frame(width: Theme.minTouch, height: Theme.minTouch)
+                                .frame(width: Theme.minTouch, height: Theme.minTouch, alignment: .trailing)
                         }
                         .accessibilityLabel("Việc tồn từ hôm trước")
-                    }
-                    Spacer()
-                    if !todayTasks.isEmpty {
-                        Text("\(doneCount)/\(todayTasks.count) xong")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
                     }
                 }
             }
