@@ -18,6 +18,8 @@ struct TodayView: View {
     @State private var now = Date()
     /// Row flashed after opening a notification / widget link for it.
     @State private var highlighted: UUID?
+    /// What the last pull to refresh could not sync ("Jira: Cần đăng nhập lại"); nil = all good.
+    @State private var refreshProblem: String?
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -48,6 +50,9 @@ struct TodayView: View {
     private var list: some View {
         List {
             Section {
+                if let refreshProblem {
+                    refreshProblemRow(refreshProblem)
+                }
                 if showsCheckInCard {
                     checkInCard
                 }
@@ -55,10 +60,15 @@ struct TodayView: View {
                     shutdownCard
                 }
             } header: {
-                Text(DayClock.longDate(now))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .textCase(nil)
+                // iOS 26+: the date sits right under the large title (navigationSubtitle).
+                if #available(iOS 26, *) {
+                    EmptyView()
+                } else {
+                    Text(DayClock.longDate(now))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .textCase(nil)
+                }
             }
 
             if !inbox.isEmpty {
@@ -92,7 +102,7 @@ struct TodayView: View {
 
             Section {
                 if todayTasks.isEmpty {
-                    Text("Chưa có việc nào hôm nay. Chốt việc trong check-in hoặc chạm ↻ để kéo việc từ GitHub, Jira.")
+                    Text("Chưa có việc nào hôm nay. Chốt việc trong check-in hoặc kéo xuống để lấy việc từ GitHub, Jira.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 } else {
@@ -161,12 +171,15 @@ struct TodayView: View {
             .headerProminence(.increased)
         }
         .listStyle(.insetGrouped)
+        // Pull to refresh: the server pulls GitHub / Jira first, then the usual pass.
+        .refreshable {
+            let problem = await AppLifecycle.refreshNow()
+            withAnimation { refreshProblem = problem }
+        }
         .navigationTitle("Hôm nay")
+        .dateSubtitle(DayClock.longDate(now))
         .toolbarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                RefreshButton()
-            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button("Việc mới", systemImage: "plus") { router.taskEditor = .new(someday: false) }
             }
@@ -352,6 +365,30 @@ struct TodayView: View {
         .padding(.vertical, 4)
     }
 
+    /// Pull to refresh finished but GitHub / Jira could not be synced.
+    private func refreshProblemRow(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+                .frame(width: 30, height: 30)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Chưa đồng bộ được").font(.subheadline.weight(.semibold))
+                Text(message).font(.footnote).foregroundStyle(.secondary)
+                Text("Kéo xuống để thử lại, hoặc kiểm tra trong Cài đặt.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button("Ẩn", systemImage: "xmark") { withAnimation { refreshProblem = nil } }
+                .labelStyle(.iconOnly)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: Theme.minTouch, height: Theme.minTouch, alignment: .topTrailing)
+                .buttonStyle(.borderless)
+        }
+        .padding(.vertical, 2)
+    }
+
     // MARK: Data
 
     private var morningRows: [TimelineRow.Model] {
@@ -359,7 +396,7 @@ struct TodayView: View {
         let noon = DayClock.noon(now)
         let external = externalItems
             .filter { $0.occurredAt >= start && $0.occurredAt < noon }
-            .map { TimelineRow.Model(id: $0.id.uuidString, title: $0.title, subtitle: "\($0.source.label) · \(DayClock.time($0.occurredAt))", systemImage: $0.source.systemImage, url: $0.url.flatMap(URL.init(string:)), source: $0.source) }
+            .map { TimelineRow.Model(id: $0.id.uuidString, title: $0.title, subtitle: "\($0.source.label) · \(DayClock.time($0.occurredAt))", systemImage: $0.source.systemImage, url: $0.url.flatMap(URL.init(string:)), source: $0.source, duration: $0.durationSeconds.map { ActivityStyle.duration(seconds: $0) }) }
         return external
     }
 
@@ -409,6 +446,8 @@ struct TimelineRow: View {
         let systemImage: String
         let url: URL?
         var source: ExternalSource? = nil
+        /// Jira work log: time spent ("30m", "1h"), shown as a small chip under the subtitle.
+        var duration: String? = nil
     }
 
     let row: Model
@@ -437,6 +476,12 @@ struct TimelineRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title)
                 Text(row.subtitle).font(.footnote).foregroundStyle(.secondary)
+                if let duration = row.duration {
+                    TagView(text: duration, highlighted: false)
+                        .monospacedDigit()
+                        .padding(.top, 2)
+                        .accessibilityLabel("Đã log \(duration)")
+                }
             }
         }
         .frame(minHeight: 44)
@@ -790,34 +835,15 @@ struct InboxRow: View {
     }
 }
 
-/// "Đồng bộ ngay" in the app bar: GitHub / Jira on the server, Calendar, push + pull, journal.
-/// Shows the last refresh time; the icon spins while running.
-struct RefreshButton: View {
-    @Environment(SupabaseService.self) private var supabase
-    @State private var isRefreshing = false
-
-    var body: some View {
-        Button {
-            guard !isRefreshing else { return }
-            isRefreshing = true
-            Task {
-                await AppLifecycle.refreshNow()
-                isRefreshing = false
-            }
-        } label: {
-            HStack(spacing: 5) {
-                if let last = supabase.lastRefreshAt {
-                    Text(DayClock.time(last))
-                        .font(.footnote)
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                }
-                Image(systemName: "arrow.clockwise")
-                    .symbolEffect(.rotate, options: .repeat(.continuous), isActive: isRefreshing)
-            }
+private extension View {
+    /// The day under the large title, Apple-style ("Thứ Ba, 3 tháng 11"); older iOS shows it as the
+    /// first section's header instead.
+    @ViewBuilder
+    func dateSubtitle(_ text: String) -> some View {
+        if #available(iOS 26, *) {
+            navigationSubtitle(text)
+        } else {
+            self
         }
-        .disabled(isRefreshing)
-        .accessibilityLabel("Đồng bộ ngay")
-        .accessibilityValue(supabase.lastRefreshAt.map { "Cập nhật lúc \(DayClock.time($0))" } ?? "Chưa đồng bộ")
     }
 }
