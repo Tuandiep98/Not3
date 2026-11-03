@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { fetchLinkedItem, type Provider, validToken } from "./integrations.ts";
 import { doneRules } from "./settings.ts";
+import { buildCards } from "./cards.ts";
 import { linkAndSync } from "./links.ts";
 
 /**
@@ -54,5 +55,6 @@ export async function reconcileUser(
     }
   }
   await linkAndSync(db, userId);
+  await buildCards(db, userId);
   return refreshed;
 }

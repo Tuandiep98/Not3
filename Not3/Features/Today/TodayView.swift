@@ -332,6 +332,13 @@ struct TaskRow: View {
                 if task.linkTitle == nil, let suggestion = task.linkSuggestionTitle {
                     linkSuggestion(suggestion)
                 }
+                if let summary = task.cardSummary, !summary.isEmpty, task.status != .done {
+                    // Card: where the PR / ticket stand now (AI, or "PR #42 đã merge · …").
+                    Text(summary)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(.rect)
@@ -346,7 +353,30 @@ struct TaskRow: View {
     /// Small GitHub / Jira logo at the end of a linked task; tap opens the original.
     @ViewBuilder
     private var sourceIcon: some View {
-        if task.linkTitle != nil || task.linkURL != nil {
+        let items = task.cardItems
+        if items.count > 1 {
+            // Several PRs / tickets for one piece of work: one menu listing each, both logos shown.
+            Menu {
+                ForEach(items) { item in
+                    if let url = item.url.flatMap(URL.init(string:)) {
+                        Link(destination: url) {
+                            Label("\(item.label) · \(item.statusText)", systemImage: item.source?.systemImage ?? "link")
+                            Text(item.title)
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: -4) {
+                    ForEach(Array(Set(items.compactMap(\.source))).sorted { $0.rawValue < $1.rawValue }, id: \.self) {
+                        SourceIcon(source: $0, size: 15)
+                    }
+                }
+                .frame(minWidth: Theme.minTouch, minHeight: Theme.minTouch)
+                .contentShape(.rect)
+            }
+            .padding(.trailing, -12)
+            .accessibilityLabel("\(items.count) mục liên kết: \(items.map(\.label).joined(separator: ", "))")
+        } else if task.linkTitle != nil || task.linkURL != nil {
             let source = ExternalSource(linkURL: task.linkURL)
             let icon = Group {
                 if let source {

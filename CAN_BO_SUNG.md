@@ -466,6 +466,19 @@ Target mới `Not3Share` (`com.tuandiep.not3.share`) cần App Group `group.com.
 
 Thử: Safari mở một PR → Chia sẻ → **Not3** → chọn *Việc* → mở Not3, việc có logo GitHub. Ảnh → Chia sẻ → Not3 → *Ghi chú* → ghi chú có ảnh. Nếu không thấy Not3 trong bảng chia sẻ: kéo hàng app sang phải → **Thêm** → bật Not3.
 
+## L. Thẻ hợp nhất PR ↔ ticket
+
+### - [ ] L1. Migration + deploy
+
+```bash
+supabase db push                       # 20261104010000_cards.sql (bảng cards)
+supabase functions deploy sync-integrations poll-active webhook-github webhook-jira tick
+```
+
+(Deploy mọi function có dùng `_shared/integrations.ts` / `reconcile.ts`. Chắc ăn nhất là `supabase functions deploy` để deploy tất cả.)
+
+Thử: một việc có liên kết ticket Jira `ABC-1`, rồi mở một PR có tiêu đề chứa `ABC-1` → sau lần đồng bộ tiếp theo, dưới việc có dòng tóm tắt; logo GitHub + Jira chạm vào ra danh sách từng mục.
+
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 
 - [ ] **F1. Kiếm tiền**: miễn phí + gói Pro (tích hợp, tổng kết AI) hay trả một lần? Ảnh hưởng tới giai đoạn 4 (StoreKit, giới hạn tính năng).

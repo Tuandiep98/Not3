@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { classifyAndApply } from "./classify.ts";
+import { buildCards } from "./cards.ts";
 import { linkAndSync } from "./links.ts";
 import {
   type ActivityRow,
@@ -1358,8 +1359,10 @@ export async function syncUser(
     const changed = await linkAndSync(db, userId);
     // Then classify what is left: tasks / journal / ignored / "chưa phân loại".
     const created = await classifyAndApply(db, userId);
+    // One card per linked task (PR ↔ ticket together, two-line summary).
+    const cards = await buildCards(db, userId);
     // Tasks changed on the server → wake the app to refresh its data and widgets.
-    if (changed.length > 0 || created > 0) await queueSilentRefresh(db, userId);
+    if (changed.length > 0 || created > 0 || cards > 0) await queueSilentRefresh(db, userId);
   } catch (e) {
     console.error("[sync] link / classify", e);
   }

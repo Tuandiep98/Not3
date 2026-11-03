@@ -641,6 +641,27 @@ final class SupabaseService {
         }
     }
 
+    /// Cards: summary + all linked PRs / tickets per task. Tasks without a card are cleared.
+    func pullCards(_ context: ModelContext) async {
+        guard let client, userId != nil else { return }
+        do {
+            let cards: [CardRecord] = try await client.from("cards")
+                .select("task_id, summary, items")
+                .execute()
+                .value
+            let byTask = Dictionary(cards.map { ($0.taskId, $0) }, uniquingKeysWith: { a, _ in a })
+            for task in try context.fetch(FetchDescriptor<TaskItem>()) {
+                let card = byTask[task.id]
+                let json = card.flatMap { try? JSONEncoder().encode($0.items) }.flatMap { String(data: $0, encoding: .utf8) }
+                if task.cardSummary != card?.summary { task.cardSummary = card?.summary }
+                if task.cardItemsJSON != json { task.cardItemsJSON = json }
+            }
+            try context.save()
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     func answerLinkSuggestion(_ task: TaskItem, accept: Bool, context: ModelContext) async {
         guard let client, let id = task.linkSuggestionId else { return }
         do {

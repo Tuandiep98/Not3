@@ -3,6 +3,7 @@
 import { adminClient, json } from "../_shared/admin.ts";
 import { githubItem, type GithubSearchItem } from "../_shared/integrations.ts";
 import { classifyAndApply } from "../_shared/classify.ts";
+import { buildCards } from "../_shared/cards.ts";
 import { linkAndSync } from "../_shared/links.ts";
 import { queueSilentRefresh } from "../_shared/push.ts";
 import { doneRules } from "../_shared/settings.ts";
@@ -88,7 +89,8 @@ Deno.serve(async (req) => {
       );
       const changed = await linkAndSync(db, u.user_id);
       const created = await classifyAndApply(db, u.user_id);
-      if (changed.length > 0 || created > 0) {
+      const cards = await buildCards(db, u.user_id);
+      if (changed.length > 0 || created > 0 || cards > 0) {
         await queueSilentRefresh(db, u.user_id);
       }
     }

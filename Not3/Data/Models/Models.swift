@@ -202,6 +202,14 @@ final class TaskItem {
     var isSomeday: Bool = false
     /// Occurrence of a repeating task (`TaskSeries.id`).
     var seriesId: UUID?
+    /// Server card (`cards`): two-line progress summary and every PR / ticket of this work.
+    var cardSummary: String?
+    var cardItemsJSON: String?
+
+    var cardItems: [CardItem] {
+        guard let data = cardItemsJSON?.data(using: .utf8) else { return [] }
+        return (try? JSONDecoder().decode([CardItem].self, from: data)) ?? []
+    }
 
     init(title: String, category: String?, plannedAt: Date?, durationMinutes: Int?, source: TaskSource) {
         self.title = title
@@ -230,6 +238,23 @@ final class TaskItem {
     func touch() {
         updatedAt = Date()
         needsSync = true
+    }
+}
+
+/// One PR / issue / ticket on a task's card (mirrors `CardItem` in supabase/functions/_shared/cards.ts).
+struct CardItem: Codable, Hashable, Sendable, Identifiable {
+    var provider: String
+    var externalId: String
+    var label: String
+    var title: String
+    var url: String?
+    var statusText: String
+
+    var id: String { "\(provider)|\(externalId)" }
+    var source: ExternalSource? { ExternalSource(rawValue: provider) }
+
+    enum CodingKeys: String, CodingKey {
+        case provider, externalId = "external_id", label, title, url, statusText = "status_text"
     }
 }
 

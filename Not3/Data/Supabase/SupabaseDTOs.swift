@@ -456,6 +456,17 @@ struct TaskLinkRecord: Decodable, Sendable {
     }
 }
 
+/// A server card (`cards`, built by supabase/functions/_shared/cards.ts).
+struct CardRecord: Decodable, Sendable {
+    let taskId: UUID
+    let summary: String
+    let items: [CardItem]
+
+    enum CodingKeys: String, CodingKey {
+        case taskId = "task_id", summary, items
+    }
+}
+
 struct AcceptLinkParams: Encodable, Sendable {
     let pSuggestion: UUID
 

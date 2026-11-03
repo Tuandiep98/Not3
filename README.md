@@ -551,7 +551,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Webhook Jira (`webhook-jira`): server tự đăng ký webhook động cho từng người (assignee / reporter = mình; issue tạo / sửa / xoá) bằng token của họ, tự gia hạn khi còn < 7 ngày (Jira cho 30 ngày), lỗi thì thử lại sau 1 ngày; xác thực JWT HS256 ký bằng client secret; payload chỉ là tín hiệu → kéo lại Jira bằng token người dùng rồi link / phân loại / silent push. Poll 15 phút vẫn giữ làm lưới an toàn (theo dõi, chuyển trạng thái, log work không có trong webhook). Cần scope `manage:jira-webhook` — xem `CAN_BO_SUNG.md` G10
 - [ ] Atlassian Personal Data Reporting API (bắt buộc khi app Jira ở chế độ Sharing và lưu accountId)
 - [ ] GitHub: Projects v2, Discussions, cảnh báo bảo mật, tổng đóng góp (GraphQL / quyền riêng)
-- [ ] Thẻ nội dung hợp nhất `build-cards` (gộp PR ↔ ticket cùng việc, tóm tắt AI 2 dòng)
+- [x] Thẻ nội dung hợp nhất (`_shared/cards.ts`, bảng `cards`): mỗi việc có liên kết = một thẻ gồm ticket + PR của nó, kèm PR có nhắc mã ticket. Trạng thái lấy theo mục tiến xa nhất. Tóm tắt 2 dòng bằng AI (một lần gọi cho mọi thẻ đổi, chỉ gửi tiêu đề + trạng thái; chỉ cho thẻ ≥ 2 mục), còn lại theo luật ("NOT-118 Code Review · PR #42 đã merge"). Dựng lại sau mỗi lần sync / webhook GitHub / đối soát. App: dòng tóm tắt dưới việc, logo GitHub + Jira mở menu từng mục
 
 **Giai đoạn 4 — Widget** (đang làm)
 
