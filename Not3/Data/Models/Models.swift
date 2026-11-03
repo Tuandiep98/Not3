@@ -240,6 +240,17 @@ final class TaskItem {
     var cardItemsJSON: String?
     /// Imported from Apple Reminders (`calendarItemExternalIdentifier`): ticking either side ticks the other.
     var reminderId: String?
+    /// What to do if the planned time slips (`CopingPlan`), picked at check-in. Offered first by "Xếp lại".
+    var copingRaw: String?
+    /// Times moved to a later day or slot. On device only; reset when the user says "Vẫn làm".
+    var postponeCount: Int = 0
+    /// Last "Vẫn làm" answer to "Vẫn muốn làm?": counts carried-over days from here.
+    var keptAt: Date?
+
+    var coping: CopingPlan? {
+        get { copingRaw.flatMap(CopingPlan.init(rawValue:)) }
+        set { copingRaw = newValue?.rawValue }
+    }
 
     var cardItems: [CardItem] {
         guard let data = cardItemsJSON?.data(using: .utf8) else { return [] }
@@ -343,6 +354,11 @@ final class CheckIn {
     var afternoonTaskIds: [UUID] = []
     var createdAt: Date = Date()
     var needsSync: Bool = true
+    /// "Khép lại hôm nay": when the day was closed, and how the whole day felt. On device only
+    /// (and Apple Health when the user allows it).
+    var closedAt: Date?
+    var dayMoodRaw: String?
+    var dayMoodLabel: String?
 
     init(day: Date) {
         self.day = day
@@ -355,6 +371,11 @@ final class CheckIn {
 
     /// What to show: the picked feeling, else the level's default name.
     var moodText: String? { moodLabel ?? mood?.label }
+
+    var dayMood: Mood? {
+        get { dayMoodRaw.flatMap(Mood.init(rawValue:)) }
+        set { dayMoodRaw = newValue?.rawValue }
+    }
 }
 
 @Model

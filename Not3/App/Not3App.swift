@@ -68,6 +68,7 @@ enum AppLifecycle {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-openCheckIn") { Router.shared.openCheckIn() }
+        if args.contains("-openShutdown") { Router.shared.openShutdown() }
         if args.contains("-openFolders") { Router.shared.path = [] }
         if args.contains("-openSummary") { Router.shared.path = [.summary] }
         if args.contains("-seedSample") { seedSample(context) }
@@ -82,6 +83,7 @@ enum AppLifecycle {
         // Ticks / moods / starts done on widgets while the app was closed.
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
+        await NotificationService.rescheduleShutdown(in: context)
         await CalendarService.shared.refresh(in: context)
         // Lời nhắc / Sức khỏe, when turned on (on device only).
         await LocalModule.refreshAll(in: context)
@@ -198,6 +200,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
            await MainActor.run(body: { Router.shared.isCheckInPresented }) {
             return []
         }
+        if content.categoryIdentifier == NotificationService.shutdownCategory,
+           await MainActor.run(body: { Router.shared.isShutdownPresented }) {
+            return []
+        }
         return [.banner, .sound, .list]
     }
 
@@ -242,6 +248,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             await TaskActions.handleEvening(
                 action: action, taskId: taskId, in: context, serverPushActive: supabase.hasServerPush
             )
+            await supabase.syncPending(context)
+            WidgetBridge.publish()
+            return
+        }
+        if action == NotificationService.shutdownTomorrowAction {
+            await TaskActions.closeDayMovingRest(in: context, serverPushActive: supabase.hasServerPush)
+            try? context.save()
+            await NotificationService.rescheduleShutdown(in: context)
             await supabase.syncPending(context)
             WidgetBridge.publish()
             return

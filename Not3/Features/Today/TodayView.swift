@@ -51,6 +51,9 @@ struct TodayView: View {
                 if showsCheckInCard {
                     checkInCard
                 }
+                if showsShutdownCard {
+                    shutdownCard
+                }
             } header: {
                 Text(DayClock.longDate(now))
                     .font(.subheadline)
@@ -95,7 +98,7 @@ struct TodayView: View {
                 } else {
                     // Fixed order (time, then creation): ticking a task never moves it.
                     ForEach(todayTasks) { task in
-                        TaskRow(task: task)
+                        TaskRow(task: task, now: now)
                             .id(task.id)
                             .listRowBackground(highlighted == task.id ? Theme.accent.opacity(0.18) : nil)
                             .swipeActions(edge: .leading) {
@@ -312,6 +315,43 @@ struct TodayView: View {
         .frame(minHeight: Theme.minTouch)
     }
 
+    // MARK: Khép lại hôm nay
+
+    /// Shown from this long before the shutdown time until the day is closed (or ends).
+    private static let shutdownLead: TimeInterval = 90 * 60
+
+    private var showsShutdownCard: Bool {
+        guard AppSettings.shutdownEnabled else { return false }
+        let closed = checkIns.contains { $0.day == DayClock.startOfDay(now) && $0.closedAt != nil }
+        return !closed && now >= AppSettings.shutdownTime(on: now).addingTimeInterval(-Self.shutdownLead)
+    }
+
+    private var shutdownCard: some View {
+        let open = todayTasks.count - doneCount
+        let status = open == 0 ? "Không còn việc dang dở" : "\(open) việc còn lại · xếp cho mai trong 1 phút"
+        return HStack(spacing: 12) {
+            Image(systemName: "moon.stars.fill")
+                .font(.title3)
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(Color.indigo, in: .rect(cornerRadius: 10))
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Khép lại hôm nay").font(.headline)
+                Text("\(doneCount) việc xong · \(status)")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            Button("Mở") { router.isShutdownPresented = true }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Khép lại hôm nay")
+        }
+        .frame(minHeight: Theme.minTouch)
+        .padding(.vertical, 4)
+    }
+
     // MARK: Data
 
     private var morningRows: [TimelineRow.Model] {
@@ -406,9 +446,14 @@ struct TimelineRow: View {
 
 struct TaskRow: View {
     @Bindable var task: TaskItem
+    /// The list's minute tick: a plan turns "Lỡ giờ" without leaving the screen.
+    var now: Date = Date()
     @Environment(SupabaseService.self) private var supabase
     @Environment(Router.self) private var router
     @Environment(\.modelContext) private var context
+    @State private var isReplanning = false
+    /// Next free stretch, read when "Xếp lại" opens.
+    @State private var gap: Date?
 
     var body: some View {
         HStack(spacing: 4) {
@@ -435,6 +480,11 @@ struct TaskRow: View {
                 }
                 if task.linkTitle == nil, let suggestion = task.linkSuggestionTitle {
                     linkSuggestion(suggestion)
+                }
+                if TodayList.isMissed(task, now: now) {
+                    missedPrompt
+                } else if TodayList.isStale(task, now: now) {
+                    stalePrompt
                 }
                 if let summary = task.cardSummary, !summary.isEmpty, task.status != .done {
                     // Card: where the PR / ticket stand now (AI, or "PR #42 đã merge · …").
@@ -520,6 +570,111 @@ struct TaskRow: View {
             .font(.caption)
             .buttonStyle(.borderless)
             .controlSize(.mini)
+        }
+        .padding(.top, 2)
+    }
+
+    // MARK: Lỡ giờ → Xếp lại
+
+    /// The time passed without "Bắt đầu": one button, the choices only after a tap.
+    private var missedPrompt: some View {
+        HStack(spacing: 6) {
+            Label("Lỡ giờ \(task.plannedAt.map(DayClock.time) ?? "")", systemImage: "clock.badge.exclamationmark")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.orange)
+                .lineLimit(1)
+            Button("Xếp lại") {
+                gap = TaskActions.nextGap(for: task)
+                isReplanning = true
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+        }
+        .padding(.top, 2)
+        .confirmationDialog("Xếp lại \"\(task.title)\"", isPresented: $isReplanning, titleVisibility: .visible) {
+            replanButtons
+        } message: {
+            if let coping = task.coping {
+                Text("Bạn đã hẹn: \(coping.clause)")
+            }
+        }
+    }
+
+    /// The backup picked at check-in first, then the rest (each only once, only when it applies today).
+    @ViewBuilder
+    private var replanButtons: some View {
+        let coping = task.coping
+        let evening = TaskActions.eveningSlot(now: now)
+        if let coping, coping != .nextGap || gap != nil, coping != .evening || evening != nil {
+            Button("Như đã hẹn: \(copingTitle(coping))") { replan { _ = await TaskActions.applyCoping(task, serverPushActive: $0) } }
+        }
+        if let gap, coping != .nextGap {
+            Button("Dời sang \(DayClock.time(gap)) (lúc trống)") {
+                replan { await TaskActions.reschedule(task, to: gap, serverPushActive: $0) }
+            }
+        }
+        if coping != .shorter {
+            Button("Làm \(CopingPlan.shortMinutes) phút ngay") { replan { _ in TaskActions.startShortVersion(task) } }
+        }
+        if let evening, coping != .evening {
+            Button("Làm tối nay (\(DayClock.time(evening)))") {
+                replan { await TaskActions.reschedule(task, to: evening, serverPushActive: $0) }
+            }
+        }
+        if coping != .tomorrow {
+            Button("Dời sang mai") { replan { await TaskActions.postponeToTomorrow(task, serverPushActive: $0) } }
+        }
+        Button("Đưa vào hộp chờ") { replan { _ in TaskActions.moveToBacklog(task) } }
+        Button("Để sau", role: .cancel) {}
+    }
+
+    private func copingTitle(_ coping: CopingPlan) -> String {
+        switch coping {
+        case .shorter: "làm \(CopingPlan.shortMinutes) phút ngay"
+        case .nextGap: gap.map { "dời sang \(DayClock.time($0))" } ?? "dời sang lúc trống"
+        case .evening: TaskActions.eveningSlot(now: now).map { "làm lúc \(DayClock.time($0))" } ?? "làm buổi tối"
+        case .tomorrow: "để mai"
+        }
+    }
+
+    private func replan(_ change: @escaping @MainActor (Bool) async -> Void) {
+        let serverPush = supabase.hasServerPush
+        Task {
+            await change(serverPush)
+            try? context.save()
+            await supabase.syncPending(context)
+            WidgetBridge.publish()
+        }
+    }
+
+    // MARK: Vẫn muốn làm?
+
+    /// Asked once for work that keeps slipping; neutral, one tap to answer.
+    private var stalePrompt: some View {
+        let moved = task.postponeCount >= TodayList.staleAfter
+        let days = TodayList.daysCarried(since: max(task.keptAt ?? .distantPast, task.plannedAt ?? task.createdAt), now: now)
+        let reason = moved ? "Đã dời \(task.postponeCount) lần" : "Tồn \(days) ngày"
+        return HStack(spacing: 6) {
+            Text("\(reason) · vẫn muốn làm?")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Button("Vẫn làm") {
+                withAnimation { TaskActions.keep(task) }
+                try? context.save()
+            }
+            .font(.caption.weight(.semibold))
+            .buttonStyle(.bordered)
+            .controlSize(.mini)
+            Button("Hộp chờ") { replan { _ in TaskActions.moveToBacklog(task) } }
+                .font(.caption)
+                .buttonStyle(.borderless)
+                .controlSize(.mini)
+            Button("Bỏ") { replan { _ in TaskActions.cancel(task) } }
+                .font(.caption)
+                .buttonStyle(.borderless)
+                .controlSize(.mini)
         }
         .padding(.top, 2)
     }

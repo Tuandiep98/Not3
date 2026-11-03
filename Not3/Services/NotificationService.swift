@@ -14,6 +14,9 @@ enum NotificationService {
     nonisolated static let reminderCategory = "REMINDER"
     nonisolated static let reminderStartAction = "REMINDER_START"
     nonisolated static let reminderDoneAction = "REMINDER_DONE"
+    nonisolated static let reminderReplanAction = "REMINDER_REPLAN"
+    nonisolated static let shutdownCategory = "SHUTDOWN"
+    nonisolated static let shutdownTomorrowAction = "SHUTDOWN_TOMORROW"
     nonisolated static let syncCategories = ["SYNC_GITHUB": "Mở trên GitHub", "SYNC_JIRA": "Mở trên Jira"]
     nonisolated static let openExternalAction = "OPEN_EXTERNAL"
     nonisolated static let taskIdKey = "task_id"
@@ -22,6 +25,7 @@ enum NotificationService {
     private static let eveningIdPrefix = "evening-"
     private static let checkInIdPrefix = "local-checkin-"
     private static let taskIdPrefix = "task-"
+    private static let shutdownIdPrefix = "local-shutdown-"
 
     static func registerCategories() {
         let actions = Mood.allCases.map { mood in
@@ -51,6 +55,19 @@ enum NotificationService {
                                      icon: UNNotificationActionIcon(systemImageName: "play.fill")),
                 UNNotificationAction(identifier: reminderDoneAction, title: "Đã xong", options: [],
                                      icon: UNNotificationActionIcon(systemImageName: "checkmark")),
+                // The backup picked at check-in, else the next free stretch today, else tomorrow.
+                UNNotificationAction(identifier: reminderReplanAction, title: "Lỡ giờ? Xếp lại", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "calendar.badge.clock")),
+            ],
+            intentIdentifiers: [],
+            options: []
+        )
+        // Replaces the per-task "Xong chưa?" while on: tap to sort, or move everything left in one go.
+        let shutdown = UNNotificationCategory(
+            identifier: shutdownCategory,
+            actions: [
+                UNNotificationAction(identifier: shutdownTomorrowAction, title: "Dời hết sang mai", options: [],
+                                     icon: UNNotificationActionIcon(systemImageName: "arrow.turn.up.right")),
             ],
             intentIdentifiers: [],
             options: []
@@ -65,7 +82,48 @@ enum NotificationService {
                 options: []
             )
         }
-        UNUserNotificationCenter.current().setNotificationCategories(Set([category, evening, reminder] + sync))
+        UNUserNotificationCenter.current().setNotificationCategories(Set([category, evening, reminder, shutdown] + sync))
+    }
+
+    /// "Khép lại hôm nay" for the next 7 days, skipping today once the day is closed. On device
+    /// only (the server does not send it), so it does not depend on server push. While on, it is
+    /// the only evening notification: the per-task "Xong chưa?" ones are dropped here.
+    /// Re-run after saves (`WidgetBridge`), so today's text names what is still open.
+    static func rescheduleShutdown(in context: ModelContext) async {
+        let center = UNUserNotificationCenter.current()
+        let pending = await center.pendingNotificationRequests()
+        let enabled = AppSettings.shutdownEnabled
+        center.removePendingNotificationRequests(
+            withIdentifiers: pending.map(\.identifier).filter {
+                $0.hasPrefix(shutdownIdPrefix) || (enabled && $0.hasPrefix(eveningIdPrefix))
+            }
+        )
+        guard enabled else { return }
+
+        let closedToday = CheckInService.todaysCheckIn(context)?.closedAt != nil
+        let now = Date()
+        let open = TodayList.tasks((try? context.fetch(FetchDescriptor<TaskItem>())) ?? [], now: now)
+            .filter { $0.status == .todo || $0.status == .doing }
+        for offset in 0..<7 {
+            guard let day = DayClock.calendar.date(byAdding: .day, value: offset, to: now) else { continue }
+            let fire = offset == 0 ? shutdownTimeToday(open: open, now: now) : AppSettings.shutdownTime(on: day)
+            if fire <= now { continue }
+            if offset == 0, closedToday { continue }
+
+            let content = UNMutableNotificationContent()
+            content.title = "Khép lại hôm nay"
+            content.body = offset == 0 ? Copy.shutdownBody(open) : Copy.shutdownBody(nil)
+            content.sound = .default
+            content.categoryIdentifier = shutdownCategory
+            content.style(.active, relevance: 0.5, thread: "shutdown", link: "not3://shutdown")
+            let comps = DayClock.calendar.dateComponents([.year, .month, .day, .hour, .minute], from: fire)
+            let request = UNNotificationRequest(
+                identifier: shutdownIdPrefix + "\(comps.year!)-\(comps.month!)-\(comps.day!)",
+                content: content,
+                trigger: UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
+            )
+            try? await center.add(request)
+        }
     }
 
     @discardableResult
@@ -107,6 +165,17 @@ enum NotificationService {
         }
     }
 
+    /// The set time, or 15 minutes after the last plan of the day ends if that is later
+    /// (as the per-task check did), at the latest 23:30.
+    static func shutdownTimeToday(open: [TaskItem], now: Date = Date()) -> Date {
+        let set = AppSettings.shutdownTime(on: now)
+        let lastEnd = open.compactMap { task -> Date? in
+            guard let planned = task.plannedAt, DayClock.calendar.isDate(planned, inSameDayAs: now) else { return nil }
+            return planned.addingTimeInterval(Double((task.durationMinutes ?? 0) + 15) * 60)
+        }.max()
+        return min(max(set, lastEnd ?? set), DayClock.at(hour: 23, minute: 30, on: now))
+    }
+
     /// Reminder at the planned time of an if–then plan.
     static func scheduleReminder(for task: TaskItem) async {
         guard let date = task.plannedAt, date > Date() else { return }
@@ -129,8 +198,7 @@ enum NotificationService {
 
     /// Evening follow-up "Đã làm chưa?" with Xong / Dời sang mai.
     static func scheduleEveningCheck(for task: TaskItem) async {
-        guard UserDefaults.standard.bool(forKey: SettingsKey.eveningCheckIn),
-              let fire = eveningTime(for: task), fire > Date() else { return }
+        guard AppSettings.perTaskEveningCheck, let fire = eveningTime(for: task), fire > Date() else { return }
         let content = UNMutableNotificationContent()
         content.title = Copy.title("Xong chưa: ", task.title)
         content.body = "Nhấn giữ để chọn Xong hoặc Dời sang mai."
@@ -179,6 +247,15 @@ enum Copy {
         let full = prefix + text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard full.count > maxTitle else { return full }
         return String(full.prefix(maxTitle - 1)).trimmingCharacters(in: .whitespaces) + "…"
+    }
+
+    /// Today: what is still open ("Còn 2 việc: Đọc sách, Viết test…"); later days: generic.
+    @MainActor
+    static func shutdownBody(_ open: [TaskItem]?) -> String {
+        guard let open else { return "Xem lại việc đã xong, xếp việc còn lại cho mai. Mất khoảng 1 phút." }
+        guard !open.isEmpty else { return "Không còn việc dang dở. Chạm để ghi cảm nhận cả ngày." }
+        let names = open.prefix(3).map(\.title).joined(separator: ", ") + (open.count > 3 ? "…" : "")
+        return "Còn \(open.count) việc: \(names). Chạm để xếp, nhấn giữ để dời hết sang mai."
     }
 
     @MainActor

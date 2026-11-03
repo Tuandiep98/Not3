@@ -11,6 +11,7 @@ struct CheckInSheet: View {
     @AppStorage(SettingsKey.addToCalendar) private var addToCalendar = true
     @AppStorage(SettingsKey.checkInDurations) private var durationsRaw = IntList.encode(ChipCatalog.defaultDurations)
     @AppStorage(SettingsKey.checkInTimeSlots) private var timeSlotsRaw = IntList.encode(ChipCatalog.defaultTimeSlots)
+    @AppStorage(SettingsKey.lastCopingPlan) private var lastCopingRaw = CopingPlan.nextGap.rawValue
     @Query private var chips: [Chip]
     @Query(sort: \TaskItem.createdAt, order: .reverse) private var tasks: [TaskItem]
     @Query(sort: \ExternalItem.occurredAt) private var externalItems: [ExternalItem]
@@ -27,6 +28,11 @@ struct CheckInSheet: View {
     @State private var selectedTask: AfternoonSuggestion?
     @State private var timeOptions: [TimeOption] = []
     @State private var selectedTime: TimeOption?
+    /// The user chose a time: later calendar reads stop moving the selection.
+    @State private var didPickTime = false
+    /// Meetings and other plans for the rest of today (`CalendarService.busyIntervals`).
+    @State private var busy: [BusyInterval] = []
+    @State private var coping: CopingPlan?
     @State private var duration: Int?
     @State private var addingMode: AddMode?
     @State private var draftText = ""
@@ -43,6 +49,7 @@ struct CheckInSheet: View {
                     moodSection
                     afternoonSection
                     timeSection
+                    copingSection
                     planCard
                 }
                 .padding(.horizontal, 20)
@@ -88,8 +95,11 @@ struct CheckInSheet: View {
             // Background refresh is not guaranteed on time: read Calendar again when the sheet opens.
             await calendar.refresh(in: context)
             mergeMorning(todaysExternalTitles())
+            refreshBusy()
             await loadServerSuggestions()
         }
+        .onChange(of: duration) { refreshBusy() }
+        .onChange(of: selectedTask) { refreshBusy() }
     }
 
     // MARK: Sections
@@ -176,10 +186,13 @@ struct CheckInSheet: View {
 
     private var timeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SheetSectionHeader(title: "Lúc mấy giờ, bao lâu?")
+            SheetSectionHeader(title: "Lúc mấy giờ, bao lâu?",
+                               subtitle: busy.isEmpty ? nil : "Theo Lịch và việc đã hẹn hôm nay")
             ChipGroupContainer {
                 ForEach(timeOptions) { option in
-                    ChipButton(title: option.label, isOn: selectedTime == option) {
+                    let chip = timeChip(option)
+                    ChipButton(title: chip.title, isOn: selectedTime == option, systemImage: chip.symbol, tint: chip.tint) {
+                        didPickTime = true
                         selectedTime = selectedTime == option ? nil : option
                     }
                     .contextMenu {
@@ -220,12 +233,43 @@ struct CheckInSheet: View {
         }
     }
 
+    /// "15:10 · trống 50′" / "14:00 · bận": whether the chip fits around meetings and other plans.
+    private func timeChip(_ option: TimeOption) -> (title: String, symbol: String?, tint: Color?) {
+        switch CheckInPlanner.availability(at: option.date, duration: duration ?? ChipCatalog.preferredDuration,
+                                           busy: busy, dayEnd: CheckInPlanner.dayEnd(option.date)) {
+        case .busy:
+            return ("\(option.label) · bận", "exclamationmark.circle", .orange)
+        case .free(let minutes?):
+            return ("\(option.label) · trống \(minutes)′", option.isGap ? "calendar.badge.checkmark" : nil, nil)
+        case .free(nil):
+            return (option.isGap ? "\(option.label) · trống" : option.label, option.isGap ? "calendar.badge.checkmark" : nil, nil)
+        }
+    }
+
+    /// "Nếu lỡ giờ thì sao?" — one backup, picked now, carried out by "Xếp lại" later.
+    @ViewBuilder
+    private var copingSection: some View {
+        if selectedTask != nil {
+            VStack(alignment: .leading, spacing: 8) {
+                SheetSectionHeader(title: "Nếu lỡ giờ thì sao?",
+                                   subtitle: "Chọn sẵn một cách xoay xở, lúc lỡ giờ chỉ cần một chạm")
+                ChipGroupContainer {
+                    ForEach(CopingPlan.allCases) { plan in
+                        ChipButton(title: plan.chipLabel, isOn: coping == plan, systemImage: plan.systemImage) {
+                            coping = coping == plan ? nil : plan
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var planCard: some View {
         if let task = selectedTask {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Kế hoạch nếu – thì").font(.footnote).foregroundStyle(.secondary)
-                Text(CheckInPlanner.sentence(task: task.title, time: selectedTime, duration: duration))
+                Text(CheckInPlanner.sentence(task: task.title, time: selectedTime, duration: duration, coping: coping))
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -267,6 +311,22 @@ struct CheckInSheet: View {
         selectedTime = timeOptions.first
         let durations = IntList.decode(durationsRaw)
         duration = durations.contains(ChipCatalog.preferredDuration) ? ChipCatalog.preferredDuration : durations.first
+        coping = CopingPlan(rawValue: lastCopingRaw)
+        refreshBusy()
+    }
+
+    /// Re-reads what fills the rest of today, adds chips for free stretches the user's slots miss,
+    /// and (until the user picks one) selects the first time that fits.
+    private func refreshBusy() {
+        let now = Date()
+        busy = calendar.busyIntervals(on: now, tasks: tasks, excluding: selectedTask?.taskId)
+        let minutes = duration ?? ChipCatalog.preferredDuration
+        let own = timeOptions.filter { !$0.isGap }
+        let gaps = CheckInPlanner.gapOptions(now: now, duration: minutes, busy: busy, existing: own)
+        timeOptions = (own + gaps).sorted { $0.date < $1.date }
+        if !didPickTime {
+            selectedTime = CheckInPlanner.preferredTime(timeOptions, duration: minutes, busy: busy, now: now)
+        }
     }
 
     /// The user's durations, plus one a suggestion / voice brought in that is not in the list.
@@ -387,6 +447,7 @@ struct CheckInSheet: View {
         if !parsed.title.isEmpty { addCustomTask(parsed.title) }
         if let minutes = parsed.durationMinutes { duration = minutes }
         if let hour = parsed.hour {
+            didPickTime = true
             let date = DayClock.at(hour: hour, minute: parsed.minute ?? 0)
             if let match = timeOptions.first(where: { abs($0.date.timeIntervalSince(date)) < 60 }) {
                 selectedTime = match
@@ -410,6 +471,7 @@ struct CheckInSheet: View {
             timeOptions.append(option)
             timeOptions.sort { $0.date < $1.date }
         }
+        didPickTime = true
         selectedTime = option
     }
 
@@ -435,8 +497,10 @@ struct CheckInSheet: View {
             moodLabel: moodLabel,
             task: selectedTask,
             time: selectedTask == nil ? nil : selectedTime,
-            durationMinutes: selectedTask == nil ? nil : duration
+            durationMinutes: selectedTask == nil ? nil : duration,
+            coping: selectedTask == nil ? nil : coping
         )
+        if selectedTask != nil { lastCopingRaw = coping?.rawValue ?? "" }
         let task = CheckInService.save(plan, in: context)
         let wantsCalendar = addToCalendar && task?.plannedAt != nil
         let linkedItem = selectedTask?.externalKey.flatMap { key in

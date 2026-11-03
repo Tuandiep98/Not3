@@ -48,6 +48,46 @@ final class HealthService {
         }
     }
 
+    // MARK: State of Mind (the only thing Not3 writes)
+
+    /// Option in Settings → Sức khỏe: check-in feelings → Health → Tâm trạng. Off by default.
+    static let stateOfMindKey = "module.health.stateOfMind"
+
+    private var stateOfMindType: HKStateOfMindType { HKObjectType.stateOfMindType() }
+
+    /// Asks to write State of Mind. Unlike read access, write access is visible: true only when granted.
+    func requestStateOfMindAccess() async -> Bool {
+        guard isAvailable else { return false }
+        try? await store.requestAuthorization(toShare: [stateOfMindType], read: readTypes)
+        return store.authorizationStatus(for: stateOfMindType) == .sharingAuthorized
+    }
+
+    /// Records a check-in feeling: the noon one as a momentary emotion, "Khép lại hôm nay" as the
+    /// day's mood. Only the level goes to Health (valence + one label), never task names.
+    func recordStateOfMind(_ mood: Mood, kind: HKStateOfMind.Kind, at date: Date = Date()) async {
+        guard LocalModule.isEnabled(.health), UserDefaults.standard.bool(forKey: Self.stateOfMindKey), isAvailable,
+              store.authorizationStatus(for: stateOfMindType) == .sharingAuthorized else { return }
+        let sample = HKStateOfMind(date: date, kind: kind, valence: Self.valence(mood),
+                                   labels: [Self.label(mood)], associations: [])
+        try? await store.save(sample)
+    }
+
+    nonisolated static func valence(_ mood: Mood) -> Double {
+        switch mood {
+        case .good: 0.6
+        case .ok: 0.0
+        case .empty: -0.4
+        }
+    }
+
+    nonisolated static func label(_ mood: Mood) -> HKStateOfMind.Label {
+        switch mood {
+        case .good: .satisfied
+        case .ok: .indifferent
+        case .empty: .drained
+        }
+    }
+
     // MARK: Today → done items
 
     func refresh(in context: ModelContext, now: Date = Date()) async {

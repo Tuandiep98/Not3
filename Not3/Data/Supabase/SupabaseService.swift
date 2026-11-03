@@ -95,7 +95,7 @@ final class SupabaseService {
             checkinMinute: AppSettings.checkInMinute,
             aiNotesEnabled: UserDefaults.standard.bool(forKey: SettingsKey.aiReadsIntegrations),
             syncNoteContent: AppSettings.syncNoteContent,
-            eveningCheckin: UserDefaults.standard.bool(forKey: SettingsKey.eveningCheckIn)
+            eveningCheckin: AppSettings.perTaskEveningCheck
         )
         do {
             try await client.from("profiles").upsert(row, onConflict: "user_id").execute()

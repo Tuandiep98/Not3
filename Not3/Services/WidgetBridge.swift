@@ -24,6 +24,8 @@ enum WidgetBridge {
             try? await Task.sleep(for: .milliseconds(800))
             guard !Task.isCancelled else { return }
             publish()
+            // Today's "Khép lại hôm nay" text names the tasks still open.
+            await NotificationService.rescheduleShutdown(in: Persistence.shared.mainContext)
         }
     }
 

@@ -29,6 +29,10 @@ struct RootView: View {
             CheckInSheet()
                 .appCheckInSheet()
         }
+        .sheet(isPresented: $router.isShutdownPresented) {
+            ShutdownSheet()
+                .appCheckInSheet()
+        }
         .sheet(item: $router.taskEditor) { target in
             TaskEditorSheet(target: target)
         }

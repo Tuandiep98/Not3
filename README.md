@@ -85,7 +85,11 @@ Luồng này dựa trên nghiên cứu về theo dõi tiến độ và kế ho�
 5. **Cảm nhận** — 3 mức: _Hiệu quả / Bình thường / Trống_.
 6. **Mục tiêu buổi chiều** — nếu sáng "Trống" hoặc chưa có việc phát triển bản thân, gợi ý 3 việc nhỏ; chọn 1–2.
 7. **Kế hoạch nếu–thì** — chip giờ (14:00 / 15:30 / 17:00 / Tối nay) + chip thời lượng (15 / 25 / 45 / 60 phút) → câu _"Lúc 14:00, mình sẽ học 20 từ vựng Anki trong 25 phút."_ Câu này được gửi lên Supabase, server lên lịch push nhắc. Công tắc **Thêm vào Lịch** mặc định bật.
-8. **Tối (tuỳ chọn)** — thông báo "Đã làm chưa?" với hai nút _Xong / Dời sang mai_.
+   - Chip giờ đọc **Lịch + việc đã hẹn hôm nay**: mốc trùng họp hiện "14:00 · bận" và không được chọn sẵn; mốc trống hiện "15:10 · trống 50′"; thêm tối đa 2 chip khoảng trống mà các mốc của người dùng bỏ sót.
+   - **Nếu lỡ giờ thì sao?** — một chip dự phòng (_Làm 10 phút / Dời sang lúc trống / Làm buổi tối / Để mai_), nối vào câu: _"… Nếu lỡ giờ, mình sẽ làm bản rút gọn 10 phút."_ Nhớ lựa chọn lần trước.
+8. **Lỡ giờ → Xếp lại** — quá giờ 10 phút mà chưa "Bắt đầu": dòng việc ở Hôm nay hiện "Lỡ giờ 14:00 · Xếp lại" (phương án đã hẹn đứng đầu, rồi lúc trống kế tiếp / làm 10 phút ngay / tối nay / mai / hộp chờ). Thông báo nhắc giờ có nút **Lỡ giờ? Xếp lại**.
+9. **Tối (tuỳ chọn)** — thông báo "Đã làm chưa?" với hai nút _Xong / Dời sang mai_.
+10. **Khép lại hôm nay** (mặc định 21:30) — sheet 3 phần: việc đã xong (chạm việc đã làm mà chưa tick), việc còn lại (_Mai / Hộp chờ / Bỏ_, mặc định Mai), cảm nhận cả ngày. Khi bật, đây là **thông báo buổi tối duy nhất**: thay cho "Xong chưa?" từng việc (cả cục bộ lẫn push server — app gửi `profiles.evening_checkin = false`, migration `evening_off_clears_queue` xoá push đã xếp hàng). Nội dung nêu việc còn mở, đợi tới 15 phút sau khi việc cuối kết thúc (muộn nhất 23:30), nhấn giữ có nút **Dời hết sang mai**. Việc dời ≥ 3 lần hoặc tồn ≥ 3 ngày chìm xuống cuối danh sách và hỏi một lần "Vẫn muốn làm?" (_Vẫn làm / Hộp chờ / Bỏ_).
 
 ---
 
@@ -473,7 +477,7 @@ cp Not3.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved Conf
 
 Workflow (test simulator iOS 18 + 26, archive → TestFlight) tạo trong Xcode: **Product → Xcode Cloud → Create Workflow**.
 
-Tham số chạy chỉ có ở bản DEBUG: `-openCheckIn` mở thẳng sheet check-in, `-openFolders` mở màn Thư mục.
+Tham số chạy chỉ có ở bản DEBUG: `-openCheckIn` mở thẳng sheet check-in, `-openShutdown` mở "Khép lại hôm nay", `-openFolders` mở màn Thư mục.
 
 ### Chạy backend
 
@@ -563,7 +567,7 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Widget extension `Not3Widgets` (WidgetKit, iOS 18+): **Check-in** (vừa + màn hình khoá; đổi theo giờ: sáng nay → "Sáng nay thế nào?" với 3 nút → câu nếu–thì + "Bắt đầu"), **Việc hôm nay** (nhỏ / vừa / lớn, tích ngay trên widget, logo GitHub / Jira, "↺ Bị trả lại"), **Tuần này** (nhỏ + vòng màn hình khoá), **Thư mục ghi chú** (chọn thư mục khi sửa widget)
 - [x] Dữ liệu: app ghi ảnh chụp JSON vào App Group `group.com.tuandiep.not3` (`Shared/WidgetSnapshot.swift`); widget chỉ đọc. Thao tác trên widget → cập nhật ảnh chụp + xếp hàng (`widget-actions/`), app áp vào SwiftData và đồng bộ ở lần chạy sau
 - [x] Tự cập nhật: sau mọi lần lưu SwiftData (debounce), khi vào nền, BGAppRefreshTask (~30 phút) và silent push từ server khi GitHub / Jira đổi task (`_shared/push.ts`, tối đa 1 lần / 10 phút)
-- [x] Deep link `not3://today | checkin | summary | folder/<id> | note/<id> | new-note`
+- [x] Deep link `not3://today | checkin | shutdown | summary | folder/<id> | note/<id> | new-note`
 - [x] DEBUG: `-widgetGallery` (`-widgetGallery2`) vẽ mọi trạng thái widget trên simulator
 - [x] Apple Watch (`Not3Watch`, watchOS 11): Hôm nay (chạm = tích, vuốt = Bắt đầu, "↺ Bị trả lại"), check-in 3 nút cảm nhận, kế hoạch chiều + Bắt đầu, "Thêm việc" bằng đọc chính tả. Đồng bộ qua WatchConnectivity (`Services/WatchBridge.swift`): iPhone gửi cùng snapshot với widget, Watch gửi lại `WidgetAction` → hàng đợi widget → `applyPendingActions`. Thông báo + nút trả lời nhanh trên iPhone tự hiện trên đồng hồ
 - [x] Complication (`Not3WatchWidgets`): vòng "Tuần này" (tròn), "Việc tiếp theo" (chữ nhật / dòng)
@@ -585,6 +589,14 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Sức khỏe (`HealthService`, chỉ đọc): bài tập ("Chạy bộ 32 phút · 5,1 km"), chánh niệm, đạt mục tiêu bước → việc đã làm có icon trái tim; giấc ngủ đêm qua (gộp iPhone + Watch) vào Nhật ký; mục Sức khỏe trong Tổng kết tuần
 - [x] Gợi ý nhật ký (`JournalSuggestions`): nút "Thêm khoảnh khắc" ở Buổi sáng → picker iOS → việc đã làm + Nhật ký
 - [x] Bộ lọc Focus (`TaskFocusFilter`): chọn loại việc cho từng Focus, lọc Hôm nay + widget
-- [ ] State of Mind: ghi cảm nhận check-in vào app Sức khỏe
+- [x] State of Mind (`HealthService.recordStateOfMind`): Cài đặt → Sức khỏe → "Ghi cảm nhận vào Sức khỏe" (tắt sẵn, xin quyền ghi riêng). Check-in trưa → cảm xúc lúc đó, Khép lại hôm nay → tâm trạng cả ngày; chỉ ghi mức độ (valence + 1 nhãn), không ghi tên việc. `NSHealthUpdateUsageDescription` có trong Info.plist (ITMS-90683)
+
+**Cải tiến sau rà soát (2026-11)**
+
+- [x] Mốc giờ check-in tránh lịch bận (`CalendarService.busyIntervals`, `CheckInPlanner.availability / freeGaps / gapOptions`)
+- [x] Kế hoạch dự phòng "Nếu lỡ giờ thì…" (`CopingPlan`, `TaskItem.copingRaw`, chỉ trên máy; câu nếu–thì lên server có cả vế dự phòng)
+- [x] Lỡ giờ → Xếp lại (`TodayList.isMissed`, `TaskActions.applyCoping / reschedule / startShortVersion`, nút thông báo `REMINDER_REPLAN`)
+- [x] Việc tồn tự hạ ưu tiên + "Vẫn muốn làm?" (`TaskItem.postponeCount / keptAt`, `TodayList.isStale`); bỏ qua việc GitHub / Jira và việc lặp lại
+- [x] Khép lại hôm nay (`ShutdownSheet`, `CheckIn.closedAt / dayMood`, thông báo cục bộ `SHUTDOWN`, deep link `not3://shutdown`, Cài đặt → Check-in). Cảm nhận cả ngày chỉ lưu trên máy (+ Sức khỏe nếu bật), chưa lên server
 
 Những mục cần bạn cung cấp hoặc quyết định nằm trong [`CAN_BO_SUNG.md`](CAN_BO_SUNG.md).

@@ -22,6 +22,8 @@ final class Router {
     /// "Hôm nay" opens by default, with "Thư mục" underneath like Apple Notes' last-folder behaviour.
     var path: [Route] = [.today]
     var isCheckInPresented = false
+    /// "Khép lại hôm nay" sheet.
+    var isShutdownPresented = false
     /// Task to scroll to and flash in "Hôm nay" (opened from a notification or widget).
     var focusTaskId: UUID?
     /// Task editor sheet: a new task or an existing one.
@@ -30,6 +32,11 @@ final class Router {
     func openCheckIn() {
         if path.last != .today { path = [.today] }
         present { $0.isCheckInPresented = true }
+    }
+
+    func openShutdown() {
+        if path.last != .today { path = [.today] }
+        present { $0.isShutdownPresented = true }
     }
 
     /// not3:// links from widgets. (not3://oauth is consumed by ASWebAuthenticationSession.)
@@ -54,6 +61,8 @@ final class Router {
             }
         case "checkin":
             openCheckIn()
+        case "shutdown":
+            openShutdown()
         case "backlog":
             closeSheets()
             path = [.backlog]
@@ -95,7 +104,7 @@ final class Router {
     /// Only one sheet shows at a time: a new one set while another is up is silently dropped.
     /// So close the open one first and present once its dismissal has finished.
     private func present(_ show: @escaping @MainActor (Router) -> Void) {
-        guard isCheckInPresented || taskEditor != nil else { return show(self) }
+        guard isCheckInPresented || isShutdownPresented || taskEditor != nil else { return show(self) }
         closeSheets()
         Task {
             try? await Task.sleep(for: .milliseconds(500))
@@ -105,6 +114,7 @@ final class Router {
 
     private func closeSheets() {
         isCheckInPresented = false
+        isShutdownPresented = false
         taskEditor = nil
     }
 }

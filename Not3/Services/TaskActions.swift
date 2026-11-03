@@ -30,6 +30,7 @@ enum TaskActions {
         }
         task.plannedAt = next
         task.status = .todo
+        task.postponeCount += 1
         if let sentence = task.ifThenSentence {
             task.ifThenSentence = tomorrowSentence(sentence)
         }
@@ -84,6 +85,95 @@ enum TaskActions {
         CalendarService.shared.removePlan(task)
     }
 
+    // MARK: Xếp lại (the plan slipped)
+
+    /// Start of the next free stretch today for this task, around meetings and other plans.
+    static func nextGap(for task: TaskItem, now: Date = Date()) -> Date? {
+        let others = (try? task.modelContext?.fetch(FetchDescriptor<TaskItem>())) ?? []
+        let busy = CalendarService.shared.busyIntervals(on: now, tasks: others, excluding: task.id)
+        return CheckInPlanner.nextGap(now: now, duration: task.durationMinutes ?? 30, busy: busy)
+    }
+
+    /// 20:00 today while there is still time before it.
+    static func eveningSlot(now: Date = Date()) -> Date? {
+        let evening = DayClock.at(hour: 20, minute: 0, on: now)
+        return evening > now.addingTimeInterval(5 * 60) ? evening : nil
+    }
+
+    /// Same day, new time: reminders, calendar event and the if–then sentence follow.
+    static func reschedule(_ task: TaskItem, to date: Date, serverPushActive: Bool, now: Date = Date()) async {
+        task.plannedAt = date
+        task.isSomeday = false
+        if task.status != .doing { task.status = .todo }
+        task.postponeCount += 1
+        rewriteSentence(task, now: now)
+        task.touch()
+        if task.calendarEventId != nil { CalendarService.shared.writePlan(task) }
+        await NotificationService.scheduleTaskNotifications(for: task, serverPushActive: serverPushActive)
+    }
+
+    /// "Làm 10 phút": the short version, started now (Bắt đầu → Xong still measures the real time).
+    static func startShortVersion(_ task: TaskItem, now: Date = Date()) {
+        task.durationMinutes = CopingPlan.shortMinutes
+        task.plannedAt = now
+        task.isSomeday = false
+        rewriteSentence(task, now: now)
+        task.status = .doing
+        if task.calendarEventId != nil { CalendarService.shared.writePlan(task) }
+        NotificationService.cancelReminder(for: task.id)
+    }
+
+    /// Carries out the backup picked at check-in. False when it cannot apply today (no free
+    /// stretch left, evening already passed): the caller offers the other choices.
+    @discardableResult
+    static func applyCoping(_ task: TaskItem, serverPushActive: Bool, now: Date = Date()) async -> Bool {
+        switch task.coping {
+        case .shorter:
+            startShortVersion(task, now: now)
+        case .nextGap:
+            guard let gap = nextGap(for: task, now: now) else { return false }
+            await reschedule(task, to: gap, serverPushActive: serverPushActive, now: now)
+        case .evening:
+            guard let evening = eveningSlot(now: now) else { return false }
+            await reschedule(task, to: evening, serverPushActive: serverPushActive, now: now)
+        case .tomorrow:
+            await postponeToTomorrow(task, serverPushActive: serverPushActive, now: now)
+        case nil:
+            return false
+        }
+        return true
+    }
+
+    /// "Dời hết sang mai" on the "Khép lại hôm nay" notification: every open task the user sorts
+    /// moves on (planned ones to the same time tomorrow, undated ones simply carry over), and the
+    /// day is closed with its feeling unchanged.
+    static func closeDayMovingRest(in context: ModelContext, serverPushActive: Bool, now: Date = Date()) async {
+        let all = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        for task in TodayList.tasks(all, now: now)
+        where (task.status == .todo || task.status == .doing) && TodayList.needsShutdownDecision(task) {
+            if task.plannedAt != nil {
+                await postponeToTomorrow(task, serverPushActive: serverPushActive, now: now)
+            } else {
+                task.postponeCount += 1
+            }
+        }
+        let existing = CheckInService.todaysCheckIn(context, now: now)
+        CheckInService.closeDay(mood: existing?.dayMood, moodLabel: existing?.dayMoodLabel, in: context, now: now)
+    }
+
+    /// "Vẫn làm" to "Vẫn muốn làm?": asked again only after it slips a few more times.
+    static func keep(_ task: TaskItem, now: Date = Date()) {
+        task.keptAt = now
+        task.postponeCount = 0
+    }
+
+    /// Keeps a plan's sentence true after its time changed (nothing to do without a sentence).
+    private static func rewriteSentence(_ task: TaskItem, now: Date) {
+        guard task.ifThenSentence != nil else { return }
+        task.ifThenSentence = CheckInPlanner.sentence(task: task.title, at: task.plannedAt,
+                                                      duration: task.durationMinutes, coping: task.coping, now: now)
+    }
+
     /// Keeps the if–then wording true for the new day: "Lúc 14:00, …" → "Mai lúc 14:00, …".
     nonisolated static func tomorrowSentence(_ sentence: String) -> String {
         let swaps = [("Lúc ", "Mai lúc "), ("Tối nay", "Tối mai"), ("Chiều nay", "Chiều mai")]
@@ -93,7 +183,8 @@ enum TaskActions {
         return sentence
     }
 
-    /// Handles the reminder buttons: "Bắt đầu" (→ đang làm) and "Đã xong".
+    /// Handles the reminder buttons: "Bắt đầu" (→ đang làm), "Đã xong" and "Lỡ giờ? Xếp lại"
+    /// (the backup picked at check-in, else the next free stretch, else tomorrow).
     static func handleReminder(action: String, taskId: UUID, in context: ModelContext, serverPushActive: Bool) async {
         guard let task = task(id: taskId, in: context) else { return }
         switch action {
@@ -102,6 +193,15 @@ enum TaskActions {
             task.status = .doing
         case NotificationService.reminderDoneAction:
             await setDone(task, true, serverPushActive: serverPushActive)
+        case NotificationService.reminderReplanAction:
+            guard task.status == .todo else { return }
+            if await applyCoping(task, serverPushActive: serverPushActive) {
+                break
+            } else if let gap = nextGap(for: task) {
+                await reschedule(task, to: gap, serverPushActive: serverPushActive)
+            } else {
+                await postponeToTomorrow(task, serverPushActive: serverPushActive)
+            }
         default:
             return
         }

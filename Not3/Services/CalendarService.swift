@@ -100,6 +100,20 @@ final class CalendarService {
             }
     }
 
+    /// What already fills the rest of `day`: meetings in the readable calendars plus open tasks
+    /// planned that day (30 minutes when they have no duration). `excluding` is the task being moved.
+    func busyIntervals(on day: Date, tasks: [TaskItem], excluding: UUID? = nil) -> [BusyInterval] {
+        let start = DayClock.startOfDay(day)
+        let end = DayClock.endOfDay(day)
+        let events = meetings(from: start, to: end).map { BusyInterval(start: $0.start, end: $0.end, title: $0.title) }
+        let planned = tasks.compactMap { task -> BusyInterval? in
+            guard task.id != excluding, task.status == .todo || task.status == .doing, !task.isSomeday,
+                  let at = task.plannedAt, at >= start, at < end else { return nil }
+            return BusyInterval(start: at, end: at.addingTimeInterval(Double(task.durationMinutes ?? 30) * 60), title: task.title)
+        }
+        return events + planned
+    }
+
     /// Calendars offered in Settings → Lịch (Not3's own plan calendar is never read back).
     func calendars() -> [EKCalendar] {
         guard isAuthorized else { return [] }

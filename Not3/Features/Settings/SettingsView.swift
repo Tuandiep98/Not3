@@ -15,6 +15,9 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.checkInMinute) private var checkInMinute = 0
     @AppStorage(SettingsKey.localFallback) private var localFallback = true
     @AppStorage(SettingsKey.eveningCheckIn) private var eveningCheckIn = true
+    @AppStorage(SettingsKey.shutdown) private var shutdown = true
+    @AppStorage(SettingsKey.shutdownHour) private var shutdownHour = 21
+    @AppStorage(SettingsKey.shutdownMinute) private var shutdownMinute = 30
     @AppStorage(SettingsKey.iCloudSync) private var iCloudSync = true
     @AppStorage(SettingsKey.syncNoteContent) private var syncNoteContent = true
     @AppStorage(SettingsKey.aiReadsIntegrations) private var aiReadsIntegrations = true
@@ -41,14 +44,19 @@ struct SettingsView: View {
             Section {
                 DatePicker("Giờ check-in", selection: checkInTime, displayedComponents: .hourAndMinute)
                 LabeledContent("Tổng kết tuần", value: "CN 20:00")
-                Toggle("Hỏi lại buổi tối", isOn: $eveningCheckIn)
+                Toggle("Khép lại hôm nay", isOn: $shutdown)
+                if shutdown {
+                    DatePicker("Giờ khép lại ngày", selection: shutdownTime, displayedComponents: .hourAndMinute)
+                } else {
+                    Toggle("Hỏi lại từng việc buổi tối", isOn: $eveningCheckIn)
+                }
                 Toggle("Thông báo dự phòng trên máy", isOn: $localFallback)
                 NavigationLink("Việc lặp lại") { RecurringTasksView() }
                 NavigationLink("Tuỳ chỉnh lựa chọn") { CheckInOptionsView() }
             } header: {
                 Text("Check-in")
             } footer: {
-                Text("Buổi tối hỏi \"Đã làm chưa?\" cho việc đã lên kế hoạch. Thông báo dự phòng dùng khi push \(String(format: "%02d:%02d", checkInHour, checkInMinute)) từ server không tới được máy.")
+                Text("\(shutdown ? "Buổi tối chỉ có một thông báo \"Khép lại hôm nay\": xem việc đã xong, xếp việc còn lại cho mai (hoặc nhấn giữ để dời hết), ghi cảm nhận cả ngày. Nếu việc cuối kết thúc muộn hơn, thông báo đợi việc đó xong." : "Buổi tối hỏi \"Xong chưa?\" cho từng việc đã lên kế hoạch.") Thông báo dự phòng dùng khi push \(String(format: "%02d:%02d", checkInHour, checkInMinute)) từ server không tới được máy.")
             }
 
             Section {
@@ -125,6 +133,9 @@ struct SettingsView: View {
         .onChange(of: checkInMinute) { settingsChanged() }
         .onChange(of: localFallback) { settingsChanged() }
         .onChange(of: eveningCheckIn) { settingsChanged() }
+        .onChange(of: shutdown) { shutdownChanged() }
+        .onChange(of: shutdownHour) { shutdownChanged() }
+        .onChange(of: shutdownMinute) { shutdownChanged() }
         .onChange(of: syncNoteContent) { settingsChanged() }
         .onChange(of: aiReadsIntegrations) { settingsChanged() }
         .alert("Lỗi", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
@@ -453,6 +464,35 @@ struct SettingsView: View {
             let comps = DayClock.calendar.dateComponents([.hour, .minute], from: date)
             checkInHour = comps.hour ?? 12
             checkInMinute = comps.minute ?? 0
+        }
+    }
+
+    private var shutdownTime: Binding<Date> {
+        Binding {
+            DayClock.at(hour: shutdownHour, minute: shutdownMinute)
+        } set: { date in
+            let comps = DayClock.calendar.dateComponents([.hour, .minute], from: date)
+            shutdownHour = comps.hour ?? 21
+            shutdownMinute = comps.minute ?? 30
+        }
+    }
+
+    /// The time is on device only; turning it on / off also switches the per-task evening check,
+    /// here (local) and on the server (`profiles.evening_checkin`).
+    private func shutdownChanged() {
+        Task {
+            if shutdown { await NotificationService.requestAuthorization() }
+            await NotificationService.rescheduleShutdown(in: context)
+            await supabase.upsertProfile()
+            if !shutdown {
+                // Bring back the local "Xong chưa?" for plans still ahead.
+                let now = Date()
+                let planned = ((try? context.fetch(FetchDescriptor<TaskItem>())) ?? [])
+                    .filter { $0.status == .todo && ($0.plannedAt ?? .distantPast) > DayClock.startOfDay(now) }
+                for task in planned {
+                    await NotificationService.scheduleTaskNotifications(for: task, serverPushActive: supabase.hasServerPush)
+                }
+            }
         }
     }
 

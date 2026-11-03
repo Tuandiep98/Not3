@@ -14,6 +14,12 @@ enum SettingsKey {
     static let checkInDurations = "checkInDurations"
     /// Afternoon time chips in minutes after midnight, as an `IntList` ("840,930,1020").
     static let checkInTimeSlots = "checkInTimeSlots"
+    /// "Nếu lỡ giờ thì…" picked last time, offered again at the next check-in (`CopingPlan`, "" = none).
+    static let lastCopingPlan = "lastCopingPlan"
+    /// "Khép lại hôm nay": on / off and the evening reminder time.
+    static let shutdown = "shutdownEnabled"
+    static let shutdownHour = "shutdownHour"
+    static let shutdownMinute = "shutdownMinute"
     static let appLock = "appLock"
     static let appLockDelay = "appLockDelaySeconds"
     // "Hiển thị khi khoá". Unset = follow the Face ID switch (see AppSettings).
@@ -72,6 +78,10 @@ enum AppSettings {
             SettingsKey.eveningCheckIn: true,
             SettingsKey.checkInDurations: IntList.encode(ChipCatalog.defaultDurations),
             SettingsKey.checkInTimeSlots: IntList.encode(ChipCatalog.defaultTimeSlots),
+            SettingsKey.lastCopingPlan: CopingPlan.nextGap.rawValue,
+            SettingsKey.shutdown: true,
+            SettingsKey.shutdownHour: 21,
+            SettingsKey.shutdownMinute: 30,
             SettingsKey.appLock: false,
             SettingsKey.appLockDelay: 60,
         ])
@@ -82,6 +92,18 @@ enum AppSettings {
     static var localFallback: Bool { UserDefaults.standard.bool(forKey: SettingsKey.localFallback) }
     static var syncNoteContent: Bool { UserDefaults.standard.bool(forKey: SettingsKey.syncNoteContent) }
     static var appLockEnabled: Bool { UserDefaults.standard.bool(forKey: SettingsKey.appLock) }
+    static var shutdownEnabled: Bool { UserDefaults.standard.bool(forKey: SettingsKey.shutdown) }
+
+    /// One "Xong chưa?" per planned task — only while "Khép lại hôm nay" is off; when it is on,
+    /// that single evening notification covers every open task (also tells the server via profile).
+    static var perTaskEveningCheck: Bool {
+        UserDefaults.standard.bool(forKey: SettingsKey.eveningCheckIn) && !shutdownEnabled
+    }
+
+    static func shutdownTime(on day: Date = Date()) -> Date {
+        DayClock.at(hour: UserDefaults.standard.integer(forKey: SettingsKey.shutdownHour),
+                    minute: UserDefaults.standard.integer(forKey: SettingsKey.shutdownMinute), on: day)
+    }
     static var appLockDelay: Int { UserDefaults.standard.integer(forKey: SettingsKey.appLockDelay) }
 
     static var checkInDurations: [Int] {

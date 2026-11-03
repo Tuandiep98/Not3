@@ -258,14 +258,16 @@ struct HealthSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @AppStorage(HealthService.stepGoalKey) private var stepGoal = HealthService.defaultStepGoal
+    @AppStorage(HealthService.stateOfMindKey) private var writesStateOfMind = false
     @State private var today = HealthService.Day()
     @State private var refreshTask: Task<Void, Never>?
     @State private var isConfirmingOff = false
+    @State private var stateOfMindDenied = false
 
     var body: some View {
         Form {
             Section {
-                ModuleHeader(source: .health, status: "Đang bật · chỉ đọc")
+                ModuleHeader(source: .health, status: writesStateOfMind ? "Đang bật · đọc, ghi tâm trạng" : "Đang bật · chỉ đọc")
                 LabeledContent("Đêm qua ngủ", value: today.sleepMinutes > 0 ? HealthService.hoursText(today.sleepMinutes) : "Chưa có")
                 LabeledContent("Bước hôm nay", value: today.steps.formatted(.number.locale(Locale(identifier: "vi_VN"))))
                 LabeledContent("Vận động hôm nay", value: today.workouts > 0 ? "\(today.workouts) bài · \(today.workoutMinutes) phút" : "Chưa có")
@@ -282,6 +284,28 @@ struct HealthSettingsView: View {
                 .onChange(of: stepGoal) { scheduleRefresh() }
             } footer: {
                 Text("Việc từ Sức khỏe mang biểu tượng trái tim ở Buổi sáng, chip check-in và Nhật ký. Tổng kết tuần có thêm giấc ngủ, số bước và thời gian vận động.")
+            }
+
+            Section {
+                Toggle(isOn: $writesStateOfMind) {
+                    Text("Ghi cảm nhận vào Sức khỏe")
+                    Text("Check-in trưa → cảm xúc lúc đó · Khép lại hôm nay → tâm trạng cả ngày")
+                }
+                if stateOfMindDenied {
+                    Text("Chưa có quyền ghi. Mở app Sức khỏe → Hồ sơ → Ứng dụng → Not3 và bật Tâm trạng.")
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                }
+            } footer: {
+                Text("Chỉ ghi mức độ (dễ chịu, bình thường, mệt) vào mục Tâm trạng, không ghi tên việc hay ghi chú.")
+            }
+            .onChange(of: writesStateOfMind) { _, isOn in
+                guard isOn else { stateOfMindDenied = false; return }
+                Task {
+                    let granted = await HealthService.shared.requestStateOfMindAccess()
+                    if !granted { writesStateOfMind = false }
+                    stateOfMindDenied = !granted
+                }
             }
 
             Section {
