@@ -561,6 +561,9 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Deep link `not3://today | checkin | summary | folder/<id> | note/<id> | new-note`
 - [x] DEBUG: `-widgetGallery` (`-widgetGallery2`) vẽ mọi trạng thái widget trên simulator
 - [ ] Live Activity đếm ngược phiên (nút "Bắt đầu" hiện chỉ chuyển việc sang Đang làm)
+- [x] Ảnh trong ghi chú (`NoteAttachment`, đồng bộ qua iCloud, không gửi Supabase / AI): chọn từ Thư viện hoặc chụp; JPEG ≤ 2048 px + thumbnail; xem toàn màn hình, chia sẻ, xoá
+- [x] Checklist: kéo tay nắm để sắp xếp, "Dồn mục xong xuống dưới", nhấn giữ tay nắm → "Thành việc"; danh sách ghi chú hiện "☑︎ 3/5" và số ảnh
+- [x] Share Extension `Not3Share`: chia sẻ link / chữ / ảnh từ app khác → Việc, Hộp chờ hoặc Ghi chú (chọn thư mục). Link PR / ticket thêm mã `#42` / `ABC-118` vào tiêu đề để server tự liên kết. Extension chỉ xếp hàng (`WidgetAction`), app tạo dữ liệu ở lần chạy sau
 - [x] App Intents (`Not3/Intents/`): Thêm việc (giờ / thời lượng / hộp chờ), Đánh dấu xong, Bắt đầu việc tiếp theo, Hôm nay còn việc gì, Ghi chú nhanh, Check-in, Mở ghi chú. Câu lệnh Siri bằng tiếng Anh (`en.lproj/AppShortcuts.strings`), tên trong Phím tắt bằng tiếng Việt
 - [x] Control Center / màn hình khoá / nút Action (`Not3Widgets/Controls.swift`): Thêm việc, Check-in, công tắc "Việc tiếp theo" (Bắt đầu → Xong qua hàng đợi `WidgetAction`)
 - [x] Spotlight (`Services/SpotlightIndexer.swift`): ghi chú + việc đang mở, chỉ đánh chỉ mục lại mục đã đổi; chạm kết quả mở đúng note / task (task trong hộp chờ mở sheet sửa)

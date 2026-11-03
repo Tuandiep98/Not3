@@ -15,6 +15,8 @@ enum AppGroup {
 
     static var snapshotURL: URL { container.appending(path: "widget-snapshot.json") }
     static var actionsDirectory: URL { container.appending(path: "widget-actions", directoryHint: .isDirectory) }
+    /// Photos from the Share extension, waiting for the app to attach them to a note.
+    static var shareInboxDirectory: URL { container.appending(path: "share-inbox", directoryHint: .isDirectory) }
 }
 
 enum WidgetKind {
@@ -113,15 +115,23 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// An action taken on a widget, applied by the app on its next run.
+/// An action taken on a widget, a control or the Share extension, applied by the app on its next run.
 struct WidgetAction: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case setTaskDone, startTask, recordMood }
+    enum Kind: String, Codable, Sendable { case setTaskDone, startTask, recordMood, addTask, addNote }
 
     var kind: Kind
     var taskId: UUID?
     var done: Bool?
     var mood: String?
     var at: Date = Date()
+    // Share extension (addTask / addNote).
+    var title: String?
+    var body: String?
+    var url: String?
+    var someday: Bool?
+    var folderId: UUID?
+    /// File names in `AppGroup.shareInboxDirectory`.
+    var photos: [String]?
 
     /// One file per action: the widget and the app never rewrite the same file.
     func enqueue() {

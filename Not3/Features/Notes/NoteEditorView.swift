@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -21,9 +22,12 @@ private struct NoteEditorContent: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(Router.self) private var router
     @Query private var chips: [Chip]
     @FocusState private var focus: Field?
     @State private var isShowingVoice = false
+    @State private var pickedPhotos: [PhotosPickerItem] = []
+    @State private var isShowingCamera = false
 
     private enum Field: Hashable {
         case title, body
@@ -55,8 +59,14 @@ private struct NoteEditorContent: View {
                         addChecklistItem(after: item)
                     } onDelete: {
                         context.delete(item)
+                    } onMakeTask: {
+                        makeTask(from: item)
+                    } onDrop: { id in
+                        moveChecklistItem(id, before: item)
                     }
                 }
+
+                NoteAttachmentsGrid(note: note)
             }
             .padding(.horizontal, 22)
             .padding(.top, 8)
@@ -85,6 +95,20 @@ private struct NoteEditorContent: View {
             if note.title.isEmpty && note.body.isEmpty { focus = .title }
         }
         .onDisappear(perform: cleanUpIfEmpty)
+        .onChange(of: pickedPhotos) { _, items in
+            guard !items.isEmpty else { return }
+            pickedPhotos = []
+            Task { await addPhotos(items) }
+        }
+        .fullScreenCover(isPresented: $isShowingCamera) {
+            CameraPicker { image in
+                Task {
+                    guard let prepared = await Task.detached(operation: { ImageStore.prepare(image) }).value else { return }
+                    ImageStore.attach([prepared], to: note, in: context)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .sheet(isPresented: $isShowingVoice) {
             VoiceCaptureSheet(prompt: "Nói nội dung ghi chú") { text in
                 note.body = note.body.isEmpty ? text : note.body + "\n" + text
@@ -135,6 +159,22 @@ private struct NoteEditorContent: View {
                     Image(systemName: "mic").frame(width: 36, height: 36)
                 }
                 .accessibilityLabel("Nhập bằng giọng nói")
+                PhotosPicker(selection: $pickedPhotos, maxSelectionCount: 10, matching: .images) {
+                    Image(systemName: "photo").frame(width: 36, height: 36)
+                }
+                .accessibilityLabel("Thêm ảnh")
+                if CameraPicker.isAvailable {
+                    Button { isShowingCamera = true } label: {
+                        Image(systemName: "camera").frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Chụp ảnh")
+                }
+                if hasDoneItemsAbove {
+                    Button { moveDoneItemsDown() } label: {
+                        Image(systemName: "arrow.down.to.line").frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Dồn mục đã xong xuống dưới")
+                }
                 ForEach(CheckInPlanner.rankedCategories(chips)) { chip in
                     ChipButton(title: chip.label, isOn: note.categories.contains(chip.label)) {
                         toggleCategory(chip.label)
@@ -168,6 +208,61 @@ private struct NoteEditorContent: View {
         focus = .item(newItem.id)
     }
 
+    // MARK: Checklist
+
+    /// Some ticked item sits above an unticked one.
+    private var hasDoneItemsAbove: Bool {
+        let items = note.sortedChecklist
+        guard let lastOpen = items.lastIndex(where: { !$0.isDone }) else { return false }
+        return items[..<lastOpen].contains(where: \.isDone)
+    }
+
+    private func moveDoneItemsDown() {
+        let items = note.sortedChecklist
+        withAnimation(.snappy) {
+            for (order, item) in (items.filter { !$0.isDone } + items.filter(\.isDone)).enumerated() {
+                item.order = order
+            }
+        }
+        note.updatedAt = Date()
+    }
+
+    /// Drag handle dropped on `target`: the dragged item takes the target's place.
+    private func moveChecklistItem(_ id: UUID, before target: ChecklistItem) {
+        var items = note.sortedChecklist
+        guard let from = items.firstIndex(where: { $0.id == id }),
+              let to = items.firstIndex(where: { $0.id == target.id }), from != to else { return }
+        items.insert(items.remove(at: from), at: to)
+        withAnimation(.snappy) {
+            for (order, item) in items.enumerated() { item.order = order }
+        }
+        note.updatedAt = Date()
+    }
+
+    /// "Thành việc": a task for today with the note's first category; the editor opens on it.
+    private func makeTask(from item: ChecklistItem) {
+        let title = item.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else { return }
+        let task = TaskItem(title: title, category: note.categories.first, plannedAt: nil,
+                            durationMinutes: note.durationMinutes, source: .manual)
+        context.insert(task)
+        try? context.save()
+        router.taskEditor = .edit(task.id)
+    }
+
+    // MARK: Photos
+
+    private func addPhotos(_ items: [PhotosPickerItem]) async {
+        var prepared: [ImageStore.Prepared] = []
+        for item in items {
+            guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+            if let image = await Task.detached(operation: { ImageStore.prepare(data) }).value {
+                prepared.append(image)
+            }
+        }
+        ImageStore.attach(prepared, to: note, in: context)
+    }
+
     private func toggleCategory(_ label: String) {
         if let index = note.categories.firstIndex(of: label) {
             note.categories.remove(at: index)
@@ -182,6 +277,7 @@ private struct NoteEditorContent: View {
         let isEmpty = note.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && note.body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && note.sortedChecklist.allSatisfy { $0.text.isEmpty }
+            && (note.attachments ?? []).isEmpty
         if isEmpty { context.delete(note) }
     }
 }
@@ -192,6 +288,10 @@ private struct ChecklistRow<F: Hashable>: View {
     let field: F
     let onSubmit: () -> Void
     let onDelete: () -> Void
+    let onMakeTask: () -> Void
+    let onDrop: (UUID) -> Void
+
+    @State private var isTargeted = false
 
     var body: some View {
         HStack(spacing: 2) {
@@ -207,6 +307,27 @@ private struct ChecklistRow<F: Hashable>: View {
                 .onSubmit {
                     if item.text.isEmpty { onDelete() } else { onSubmit() }
                 }
+            // Handle: drag to reorder, long-press for actions.
+            Image(systemName: "line.3.horizontal")
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+                .frame(width: 36, height: Theme.minTouch)
+                .contentShape(.rect)
+                .draggable(item.id.uuidString)
+                .contextMenu {
+                    Button("Thành việc", systemImage: "checklist.checked", action: onMakeTask)
+                        .disabled(item.text.isEmpty)
+                    Button("Xoá", systemImage: "trash", role: .destructive, action: onDelete)
+                }
+                .accessibilityLabel("Sắp xếp, hoặc nhấn giữ để chọn")
         }
+        .overlay(alignment: .top) {
+            if isTargeted { Rectangle().fill(Theme.accentInk).frame(height: 2) }
+        }
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first.flatMap(UUID.init(uuidString:)) else { return false }
+            onDrop(id)
+            return true
+        } isTargeted: { isTargeted = $0 }
     }
 }

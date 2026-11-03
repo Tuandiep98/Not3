@@ -453,6 +453,19 @@ Thử:
 
 Lưu ý: app có thêm bản địa hoá `en` (chỉ chứa câu lệnh Siri). Nếu ngôn ngữ iPhone là tiếng Anh, một vài chữ của hệ thống trong app (nút trong DatePicker…) có thể hiện tiếng Anh.
 
+## K. Ảnh trong ghi chú & Share Extension
+
+### - [ ] K1. Deploy schema CloudKit
+
+Ghi chú có thêm bảng ảnh (`NoteAttachment`). Sau khi chạy bản mới **một lần trên máy thật cài từ Xcode** (môi trường Development):
+[CloudKit Console](https://icloud.developer.apple.com) → container `iCloud.com.tuandiep.not3` → **Schema** → **Deploy Schema Changes…** sang **Production**. Bản TestFlight / App Store dùng Production: nếu chưa deploy, ảnh không đồng bộ giữa các máy (ghi chú vẫn đồng bộ).
+
+### - [ ] K2. App ID cho Share Extension
+
+Target mới `Not3Share` (`com.tuandiep.not3.share`) cần App Group `group.com.tuandiep.not3`. Với ký tự động, Xcode tự tạo App ID khi build lần đầu trên Mac. Nếu Xcode Cloud báo lỗi provisioning cho `com.tuandiep.not3.share`: [developer.apple.com](https://developer.apple.com/account/resources/identifiers/list) → Identifiers → **+** → App IDs → `com.tuandiep.not3.share` → bật **App Groups** → chọn `group.com.tuandiep.not3`.
+
+Thử: Safari mở một PR → Chia sẻ → **Not3** → chọn *Việc* → mở Not3, việc có logo GitHub. Ảnh → Chia sẻ → Not3 → *Ghi chú* → ghi chú có ảnh. Nếu không thấy Not3 trong bảng chia sẻ: kéo hàng app sang phải → **Thêm** → bật Not3.
+
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 
 - [ ] **F1. Kiếm tiền**: miễn phí + gói Pro (tích hợp, tổng kết AI) hay trả một lần? Ảnh hưởng tới giai đoạn 4 (StoreKit, giới hạn tính năng).

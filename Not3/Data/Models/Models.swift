@@ -103,6 +103,8 @@ final class Note {
     var folder: Folder?
     @Relationship(deleteRule: .cascade, inverse: \ChecklistItem.note)
     var checklist: [ChecklistItem]? = []
+    @Relationship(deleteRule: .cascade, inverse: \NoteAttachment.note)
+    var attachments: [NoteAttachment]? = []
 
     init(folder: Folder?) {
         self.folder = folder
@@ -110,6 +112,17 @@ final class Note {
 
     var sortedChecklist: [ChecklistItem] {
         (checklist ?? []).sorted { $0.order < $1.order }
+    }
+
+    var sortedAttachments: [NoteAttachment] {
+        (attachments ?? []).sorted { ($0.order, $0.createdAt) < ($1.order, $1.createdAt) }
+    }
+
+    /// "3/5" for notes with a checklist.
+    var checklistProgress: String? {
+        let items = (checklist ?? []).filter { !$0.text.isEmpty }
+        guard !items.isEmpty else { return nil }
+        return "\(items.filter(\.isDone).count)/\(items.count)"
     }
 
     /// Text shown under the title in lists (first body line or checklist items).
@@ -134,6 +147,25 @@ final class ChecklistItem {
 
     init(text: String, order: Int) {
         self.text = text
+        self.order = order
+    }
+}
+
+/// A photo in a note. Synced through iCloud with the note; never sent to Supabase or AI.
+@Model
+final class NoteAttachment {
+    var id: UUID = UUID()
+    /// JPEG, longest side ≤ 2048 px (`ImageStore`).
+    @Attribute(.externalStorage) var data: Data?
+    /// JPEG, longest side ≤ 400 px, for the grid.
+    @Attribute(.externalStorage) var thumbnail: Data?
+    var order: Int = 0
+    var createdAt: Date = Date()
+    var note: Note?
+
+    init(data: Data, thumbnail: Data?, order: Int) {
+        self.data = data
+        self.thumbnail = thumbnail
         self.order = order
     }
 }

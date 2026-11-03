@@ -112,11 +112,18 @@ struct NoteRow: View {
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
-            if !note.categories.isEmpty || note.durationMinutes != nil {
+            let photoCount = note.attachments?.count ?? 0
+            if !note.categories.isEmpty || note.durationMinutes != nil || note.checklistProgress != nil || photoCount > 0 {
                 HStack(spacing: 6) {
                     ForEach(note.categories, id: \.self) { TagView(text: $0) }
                     if let minutes = note.durationMinutes {
                         TagView(text: "\(minutes) phút", highlighted: false)
+                    }
+                    if let progress = note.checklistProgress {
+                        TagView(text: "☑︎ \(progress)", highlighted: false)
+                    }
+                    if photoCount > 0 {
+                        TagView(text: "\(photoCount) ảnh", highlighted: false)
                     }
                 }
                 .padding(.top, 4)

@@ -64,10 +64,48 @@ enum WidgetBridge {
                 if let raw = action.mood, let mood = Mood(rawValue: raw) {
                     CheckInService.recordMood(mood, in: context)
                 }
+            case .addTask:
+                await addSharedTask(action, in: context, serverPushActive: serverPushActive)
+            case .addNote:
+                await addSharedNote(action, in: context)
             }
         }
         try? context.save()
         return actions.count
+    }
+
+    /// From the Share extension. The link shows as the task's badge; a PR / ticket code in the
+    /// title lets the server link it for real.
+    private static func addSharedTask(_ action: WidgetAction, in context: ModelContext, serverPushActive: Bool) async {
+        let title = action.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !title.isEmpty else { return }
+        let task = TaskItem(title: title, category: nil, plannedAt: nil, durationMinutes: nil, source: .manual)
+        task.createdAt = action.at
+        task.linkURL = action.url
+        context.insert(task)
+        if action.someday == true {
+            TaskActions.moveToBacklog(task)
+        } else {
+            await TaskActions.schedule(task, at: nil, serverPushActive: serverPushActive)
+        }
+    }
+
+    private static func addSharedNote(_ action: WidgetAction, in context: ModelContext) async {
+        let folders = (try? context.fetch(FetchDescriptor<Folder>())) ?? []
+        let folder = folders.first { $0.id == action.folderId } ?? folders.first { $0.name == "Ghi chú nhanh" }
+        let note = Note(folder: folder)
+        note.title = action.title ?? ""
+        note.body = action.body ?? ""
+        note.createdAt = action.at
+        context.insert(note)
+        let files = (action.photos ?? []).map { AppGroup.shareInboxDirectory.appending(path: $0) }
+        let prepared = await Task.detached {
+            files.compactMap { url -> ImageStore.Prepared? in
+                defer { try? FileManager.default.removeItem(at: url) }
+                return (try? Data(contentsOf: url)).flatMap { ImageStore.prepare($0) }
+            }
+        }.value
+        ImageStore.attach(prepared, to: note, in: context)
     }
 
     // MARK: Snapshot

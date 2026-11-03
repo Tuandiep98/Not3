@@ -2,13 +2,13 @@ import Foundation
 import SwiftData
 
 /// Two stores (README §7):
-/// - `notes.store`  — Folder / Note / ChecklistItem, synced through the user's private CloudKit DB.
+/// - `notes.store`  — Folder / Note / ChecklistItem / NoteAttachment, synced through the user's private CloudKit DB.
 /// - `local.store`  — tasks, repeating series, check-ins, chips, external items: source of truth is Supabase,
 ///                    so they stay on device (SwiftData = offline cache).
 enum Persistence {
     static let cloudKitContainer = "iCloud.com.tuandiep.not3"
 
-    static let noteModels: [any PersistentModel.Type] = [Folder.self, Note.self, ChecklistItem.self]
+    static let noteModels: [any PersistentModel.Type] = [Folder.self, Note.self, ChecklistItem.self, NoteAttachment.self]
     static let localModels: [any PersistentModel.Type] = [TaskItem.self, TaskSeries.self, CheckIn.self, Chip.self, ExternalItem.self]
     static let schema = Schema(noteModels + localModels)
 
