@@ -220,6 +220,7 @@ struct CheckInSheet: View {
         morningOptions = items
 
         suggestions = CheckInPlanner.suggestions(categories: chips, recentTasks: tasks, now: now)
+            + CheckInPlanner.backlogSuggestions(tasks)
         timeOptions = CheckInPlanner.timeOptions(now: now)
         selectedTime = timeOptions.first
     }
@@ -261,8 +262,10 @@ struct CheckInSheet: View {
             }
         }
         let serverTitles = Set(serverTasks.map(\.title))
-        let custom = suggestions.filter { $0.category == nil }
-        suggestions = custom + serverTasks + suggestions.filter { $0.category != nil && !serverTitles.contains($0.title) }
+        // Typed-in chips first; rule chips and "Hộp chờ" items (they carry a taskId) after the server's.
+        let isCustom: (AfternoonSuggestion) -> Bool = { $0.category == nil && $0.taskId == nil }
+        let custom = suggestions.filter(isCustom)
+        suggestions = custom + serverTasks + suggestions.filter { !isCustom($0) && !serverTitles.contains($0.title) }
     }
 
     // MARK: Actions

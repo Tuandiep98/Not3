@@ -41,6 +41,8 @@ struct TaskRecord: Encodable, Sendable {
     let ifThenSentence: String?
     let completedAt: Date?
     let startedAt: Date?
+    let someday: Bool
+    let seriesId: UUID?
     let updatedAt: Date
     /// The app's own writes; the server marks its sync changes "sync" so the app pulls only those.
     let updatedBy = "app"
@@ -49,7 +51,8 @@ struct TaskRecord: Encodable, Sendable {
         case id, userId = "user_id", title, chips
         case plannedAt = "planned_at", durationMinutes = "duration_minutes"
         case status, source, ifThenSentence = "if_then_sentence"
-        case completedAt = "completed_at", startedAt = "started_at", updatedAt = "updated_at", updatedBy = "updated_by"
+        case completedAt = "completed_at", startedAt = "started_at", someday, seriesId = "series_id"
+        case updatedAt = "updated_at", updatedBy = "updated_by"
     }
 
     init(_ task: TaskItem, userId: UUID) {
@@ -64,7 +67,46 @@ struct TaskRecord: Encodable, Sendable {
         ifThenSentence = task.ifThenSentence
         completedAt = task.completedAt
         startedAt = task.startedAt
+        someday = task.isSomeday
+        seriesId = task.seriesId
         updatedAt = task.updatedAt
+    }
+}
+
+/// Backup of a repeating task (`task_series`); occurrences are generated on device.
+struct TaskSeriesRecord: Encodable, Sendable {
+    let id: UUID
+    let userId: UUID
+    let title: String
+    let chips: [String]
+    let hour: Int?
+    let minute: Int?
+    let durationMinutes: Int?
+    let rule: String
+    let startDay: String
+    let isActive: Bool
+    let addToCalendar: Bool
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, userId = "user_id", title, chips, hour, minute
+        case durationMinutes = "duration_minutes", rule, startDay = "start_day"
+        case isActive = "is_active", addToCalendar = "add_to_calendar", updatedAt = "updated_at"
+    }
+
+    init(_ series: TaskSeries, userId: UUID) {
+        id = series.id
+        self.userId = userId
+        title = series.title
+        chips = series.category.map { [$0] } ?? []
+        hour = series.hour
+        minute = series.minute
+        durationMinutes = series.durationMinutes
+        rule = series.ruleRaw
+        startDay = DayClock.isoDay(series.startDay)
+        isActive = series.isActive
+        addToCalendar = series.addToCalendar
+        updatedAt = series.updatedAt
     }
 }
 

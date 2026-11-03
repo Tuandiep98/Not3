@@ -47,8 +47,9 @@ enum CheckInService {
             let sentence = CheckInPlanner.sentence(task: suggestion.title, time: plan.time, duration: plan.durationMinutes)
             let task: TaskItem
             if let id = suggestion.taskId, let existing = TaskActions.task(id: id, in: context) {
-                // Unfinished morning work moved to the afternoon: same task, new time.
+                // Unfinished morning work (or a "Hộp chờ" item) moved to the afternoon: same task, new time.
                 task = existing
+                task.isSomeday = false
                 task.plannedAt = plan.time?.date
                 task.durationMinutes = plan.durationMinutes ?? task.durationMinutes
                 if task.status == .done || task.status == .cancelled { task.status = .todo }

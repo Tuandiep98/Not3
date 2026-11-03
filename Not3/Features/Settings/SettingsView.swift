@@ -35,6 +35,7 @@ struct SettingsView: View {
                 LabeledContent("Tổng kết tuần", value: "CN 20:00")
                 Toggle("Hỏi lại buổi tối", isOn: $eveningCheckIn)
                 Toggle("Thông báo dự phòng trên máy", isOn: $localFallback)
+                NavigationLink("Việc lặp lại") { RecurringTasksView() }
             } header: {
                 Text("Check-in")
             } footer: {

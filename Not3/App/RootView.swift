@@ -29,6 +29,9 @@ struct RootView: View {
             CheckInSheet()
                 .appCheckInSheet()
         }
+        .sheet(item: $router.taskEditor) { target in
+            TaskEditorSheet(target: target)
+        }
     }
 
     @ViewBuilder
@@ -36,6 +39,8 @@ struct RootView: View {
         switch route {
         case .today:
             TodayView()
+        case .backlog:
+            BacklogView()
         case .summary:
             WeeklySummaryView()
         case .activityDay(let day):

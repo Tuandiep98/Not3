@@ -149,6 +149,12 @@ final class SupabaseService {
         isSyncing = true
         defer { isSyncing = false }
         do {
+            // Series before tasks: occurrences reference them (tasks.series_id).
+            let series = try context.fetch(FetchDescriptor<TaskSeries>(predicate: #Predicate { $0.needsSync }))
+            if !series.isEmpty {
+                try await client.from("task_series").upsert(series.map { TaskSeriesRecord($0, userId: userId) }).execute()
+                series.forEach { $0.needsSync = false }
+            }
             let tasks = try context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.needsSync }))
             if !tasks.isEmpty {
                 try await client.from("tasks").upsert(tasks.map { TaskRecord($0, userId: userId) }).execute()

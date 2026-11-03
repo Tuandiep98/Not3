@@ -105,6 +105,10 @@ struct TodayView: View {
                                         }
                                     }
                                     .tint(.orange)
+                                    Button("Hộp chờ", systemImage: "tray") {
+                                        TaskActions.moveToBacklog(task)
+                                    }
+                                    .tint(.indigo)
                                 }
                             }
                     }
@@ -112,6 +116,20 @@ struct TodayView: View {
             } header: {
                 HStack {
                     Text("Việc hôm nay")
+                    if carriedOverCount > 0 {
+                        Menu {
+                            Button("Dời \(carriedOverCount) việc tồn sang mai", systemImage: "arrow.turn.up.right") {
+                                Task { await TaskActions.postponeAll(todayTasks, serverPushActive: supabase.hasServerPush) }
+                            }
+                            Button("Đưa \(carriedOverCount) việc tồn vào hộp chờ", systemImage: "tray") {
+                                TaskActions.backlogAll(todayTasks)
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .frame(width: Theme.minTouch, height: Theme.minTouch)
+                        }
+                        .accessibilityLabel("Việc tồn từ hôm trước")
+                    }
                     Spacer()
                     if !todayTasks.isEmpty {
                         Text("\(doneCount)/\(todayTasks.count) xong")
@@ -129,6 +147,9 @@ struct TodayView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 RefreshButton()
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Việc mới", systemImage: "plus") { router.taskEditor = .new(someday: false) }
             }
             ToolbarItem(placement: .bottomBar) {
                 Text(summaryText)
@@ -223,6 +244,8 @@ struct TodayView: View {
 
     private var doneCount: Int { todayTasks.filter { $0.status == .done }.count }
 
+    private var carriedOverCount: Int { todayTasks.filter { TodayList.isCarriedOver($0, now: now) }.count }
+
     private var summaryText: String {
         todayTasks.isEmpty ? "\(morningRows.count) mục đồng bộ" : "\(doneCount)/\(todayTasks.count) việc xong"
     }
@@ -280,6 +303,7 @@ struct TimelineRow: View {
 struct TaskRow: View {
     @Bindable var task: TaskItem
     @Environment(SupabaseService.self) private var supabase
+    @Environment(Router.self) private var router
     @Environment(\.modelContext) private var context
 
     var body: some View {
@@ -309,6 +333,10 @@ struct TaskRow: View {
                     linkSuggestion(suggestion)
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(.rect)
+            .onTapGesture { router.taskEditor = .edit(task.id) }
+            .accessibilityAction(named: "Sửa việc") { router.taskEditor = .edit(task.id) }
             Spacer(minLength: 8)
             sourceIcon
         }

@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-/// "Thư mục" — pinned Hôm nay / Tổng kết tuần, then the iCloud folders (artboard `Main`).
+/// "Thư mục" — pinned Hôm nay / Hộp chờ / Tổng kết tuần, then the iCloud folders (artboard `Main`).
 struct FolderListView: View {
     @Environment(\.modelContext) private var context
     @Environment(Router.self) private var router
@@ -61,6 +61,9 @@ struct FolderListView: View {
         Section {
             NavigationLink(value: Route.today) {
                 FolderRow(title: "Hôm nay", systemImage: "sun.max", count: todayCount)
+            }
+            NavigationLink(value: Route.backlog) {
+                FolderRow(title: "Hộp chờ", systemImage: "tray", count: TodayList.backlog(tasks).count)
             }
             NavigationLink(value: Route.summary) {
                 FolderRow(title: "Tổng kết tuần", systemImage: "chart.bar", countText: "\(meaningfulDays)/7")

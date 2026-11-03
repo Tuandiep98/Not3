@@ -166,6 +166,10 @@ final class TaskItem {
     /// back from Code Review…): the task is unticked and shows why.
     var reopenedAt: Date?
     var reopenedReason: String?
+    /// "Hộp chờ": no day yet. Hidden from "Hôm nay" until scheduled; offered at check-in.
+    var isSomeday: Bool = false
+    /// Occurrence of a repeating task (`TaskSeries.id`).
+    var seriesId: UUID?
 
     init(title: String, category: String?, plannedAt: Date?, durationMinutes: Int?, source: TaskSource) {
         self.title = title
@@ -190,6 +194,44 @@ final class TaskItem {
     }
 
     var source: TaskSource { TaskSource(rawValue: sourceRaw) ?? .manual }
+
+    func touch() {
+        updatedAt = Date()
+        needsSync = true
+    }
+}
+
+/// A repeating task: one `TaskItem` occurrence is created per matching day (`RecurrenceService`).
+@Model
+final class TaskSeries {
+    var id: UUID = UUID()
+    var title: String = ""
+    var category: String?
+    /// Time of day; nil = no fixed time (shows in "Hôm nay" without a reminder).
+    var hour: Int?
+    var minute: Int?
+    var durationMinutes: Int?
+    var ruleRaw: String = Recurrence.daily.rawValue
+    var startDay: Date = Date()
+    var isActive: Bool = true
+    var addToCalendar: Bool = false
+    /// Last day an occurrence was created, so a deleted occurrence is not recreated.
+    var lastGeneratedDay: Date?
+    var createdAt: Date = Date()
+    var updatedAt: Date = Date()
+    var needsSync: Bool = true
+
+    init(title: String, category: String?, rule: Recurrence, startDay: Date) {
+        self.title = title
+        self.category = category
+        self.ruleRaw = rule.rawValue
+        self.startDay = DayClock.startOfDay(startDay)
+    }
+
+    var rule: Recurrence {
+        get { Recurrence(rawValue: ruleRaw) ?? .daily }
+        set { ruleRaw = newValue.rawValue; touch() }
+    }
 
     func touch() {
         updatedAt = Date()

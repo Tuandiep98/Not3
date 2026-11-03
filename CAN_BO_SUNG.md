@@ -427,6 +427,21 @@ Màn hình khoá: nhấn giữ → **Tuỳ chỉnh** → Màn hình khoá → th
 Thử: tích một việc trên widget → mở app, việc đã xong; chọn cảm nhận trên widget lúc check-in → app ghi nhận; merge PR liên kết → widget tự cập nhật (silent push, có thể trễ vài phút; iOS tự điều tiết).
 Nếu widget trống: mở app một lần để app ghi dữ liệu cho widget.
 
+## I. Hộp chờ & việc lặp lại
+
+### - [ ] I1. Đẩy migration
+
+```bash
+supabase db push      # áp 20261104000000_backlog_recurrence.sql (tasks.someday, tasks.series_id, bảng task_series)
+```
+
+Cần chạy **trước** khi cài bản app mới. Nếu chưa chạy, app vẫn dùng bình thường trên máy nhưng đồng bộ task lên Supabase sẽ lỗi: thiếu cột `someday` / `series_id`, lỗi hiện ở Cài đặt → "Đồng bộ lần cuối".
+
+Thử:
+- Hôm nay → **+** → tạo việc "Ngày thường" lúc 9:00 → sáng hôm sau có việc mới. Lần trước chưa xong thì tự huỷ.
+- Vuốt một việc → **Hộp chờ** → việc biến mất khỏi Hôm nay và widget, hiện ở Thư mục → Hộp chờ. Lúc check-in, việc này nằm trong "Gợi ý".
+- Cài đặt → **Việc lặp lại**: tắt để dừng tạo việc mới.
+
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 
 - [ ] **F1. Kiếm tiền**: miễn phí + gói Pro (tích hợp, tổng kết AI) hay trả một lần? Ảnh hưởng tới giai đoạn 4 (StoreKit, giới hạn tính năng).

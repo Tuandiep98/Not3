@@ -34,6 +34,15 @@ final class TodayListTests: XCTestCase {
         XCTAssertEqual(shown, ["Done hôm nay"], "done today stays (ticked); earlier done and cancelled are gone")
     }
 
+    func testBacklogStaysOutOfToday() {
+        let someday = task("Đọc sách Clean Code", created: 10)
+        someday.isSomeday = true
+        let open = task("Review PR #42", created: 0)
+        XCTAssertEqual(TodayList.tasks([someday, open], now: today).map(\.title), ["Review PR #42"])
+        XCTAssertFalse(TodayList.isCarriedOver(someday, now: today))
+        XCTAssertEqual(TodayList.backlog([someday, open]).map(\.title), ["Đọc sách Clean Code"])
+    }
+
     func testFuturePlansWaitForTheirDay() {
         let tomorrow = task("Mai làm", created: 0, planned: -1)
         XCTAssertTrue(TodayList.tasks([tomorrow], now: today).isEmpty)

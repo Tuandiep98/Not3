@@ -68,6 +68,8 @@ enum AppLifecycle {
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
         await CalendarService.shared.refresh(in: context)
+        // Today's occurrences of repeating tasks, before they sync.
+        await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)
         await supabase.uploadCalendarItems(context)
         await supabase.pullContentRules()
@@ -87,6 +89,8 @@ enum AppLifecycle {
         if !supabase.isSignedIn { await supabase.restoreSession() }
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await CalendarService.shared.refresh(in: context)
+        // Today's occurrences of repeating tasks, before they sync.
+        await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)
         await supabase.uploadCalendarItems(context)
         await supabase.pullContentRules()

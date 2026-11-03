@@ -89,6 +89,14 @@ enum CheckInPlanner {
         }
     }
 
+    /// "Hộp chờ" items offered after the other suggestions; choosing one schedules that task.
+    static func backlogSuggestions(_ tasks: [TaskItem], limit: Int = 3) -> [AfternoonSuggestion] {
+        TodayList.backlog(tasks).prefix(limit).map { task in
+            AfternoonSuggestion(title: task.title, category: task.category, source: task.source,
+                                durationMinutes: task.durationMinutes, taskId: task.id)
+        }
+    }
+
     /// Chips used most in the last 14 days first; chips unused for 30 days are hidden
     /// (built-ins stay so the row is never empty).
     static func rankedCategories(_ chips: [Chip], now: Date = Date()) -> [Chip] {

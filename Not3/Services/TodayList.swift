@@ -15,7 +15,8 @@ enum TodayList {
                 guard let completed = task.completedAt else { return false }
                 return completed >= start && completed < end
             case .todo, .doing:
-                // Everything open, except plans for a later day.
+                // Everything open, except plans for a later day and the "Hộp chờ".
+                if task.isSomeday { return false }
                 if let planned = task.plannedAt { return planned < end }
                 return true
             }
@@ -25,9 +26,15 @@ enum TodayList {
         .sorted { ($0.plannedAt ?? $0.createdAt, $0.createdAt) < ($1.plannedAt ?? $1.createdAt, $1.createdAt) }
     }
 
+    /// "Hộp chờ": open work without a day, oldest first.
+    static func backlog(_ all: [TaskItem]) -> [TaskItem] {
+        all.filter { $0.isSomeday && ($0.status == .todo || $0.status == .doing) }
+            .sorted { $0.createdAt < $1.createdAt }
+    }
+
     /// Open work from before today (shown with its date).
     static func isCarriedOver(_ task: TaskItem, now: Date = Date()) -> Bool {
-        guard task.status == .todo || task.status == .doing else { return false }
+        guard !task.isSomeday, task.status == .todo || task.status == .doing else { return false }
         return (task.plannedAt ?? task.createdAt) < DayClock.startOfDay(now)
     }
 }

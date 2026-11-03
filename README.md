@@ -512,6 +512,9 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Môi trường APNs lấy theo provisioning profile (cài từ Xcode → sandbox, TestFlight / App Store → production); lỗi gửi lưu ở `push_queue.last_error` và `devices.last_error`
 - [x] Nhập giọng nói (Speech, vi-VN, trên máy khi có thể): nút "Nói" trong check-in tách câu thành việc + giờ + thời lượng; nút micro trong trình soạn
 - [x] CI: Xcode Cloud (build khi push nhánh `release/*`); đã gỡ GitHub Actions — test Edge Functions chạy tay bằng `deno test`
+- [x] Sửa việc (chạm vào việc ở Hôm nay, hoặc **+**): tiêu đề, loại, Hôm nay / Chọn giờ / Hộp chờ, thời lượng, lặp lại
+- [x] **Hộp chờ** (`tasks.someday`): việc chưa có ngày, không nhắc giờ, không hiện ở Hôm nay / widget. Lúc check-in được gợi ý cho buổi chiều. Vuốt "Hộp chờ" ở Hôm nay; menu ở header "Việc hôm nay" để dời hết việc tồn sang mai hoặc vào hộp chờ
+- [x] **Việc lặp lại** (`TaskSeries`, `Services/Recurrence.swift`): hằng ngày / ngày thường / các thứ trong tuần / ngày N hằng tháng. App tự tạo việc mỗi ngày (lúc mở app, khi refresh nền); lần trước chưa xong thì tự huỷ để không dồn lại. Bảng `task_series` trên Supabase chỉ để sao lưu. Quản lý ở Cài đặt → Việc lặp lại
 - [ ] TestFlight 10–20 người (cần Team ID, APNs, Supabase — xem `CAN_BO_SUNG.md`)
 
 **Giai đoạn 2 — AI DeepSeek** (code xong, chờ API key)

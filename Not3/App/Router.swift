@@ -4,6 +4,7 @@ import SwiftUI
 
 enum Route: Hashable {
     case today
+    case backlog
     case summary
     case activityDay(Date)
     case activityHistory
@@ -23,6 +24,8 @@ final class Router {
     var isCheckInPresented = false
     /// Task to scroll to and flash in "Hôm nay" (opened from a notification or widget).
     var focusTaskId: UUID?
+    /// Task editor sheet: a new task or an existing one.
+    var taskEditor: TaskEditorTarget?
 
     func openCheckIn() {
         if path.last != .today { path = [.today] }
@@ -43,6 +46,11 @@ final class Router {
             focusTaskId = id
         case "checkin":
             openCheckIn()
+        case "backlog":
+            path = [.backlog]
+        case "new-task":
+            if path.last != .today && path.last != .backlog { path = [.today] }
+            taskEditor = .new(someday: path.last == .backlog)
         case "summary":
             path = [.summary]
         case "folder":
@@ -67,6 +75,19 @@ final class Router {
             path = [folder.map { .folder($0.persistentModelID) } ?? .allNotes, .note(note.persistentModelID)]
         default:
             break
+        }
+    }
+}
+
+/// What the task editor sheet opens on.
+enum TaskEditorTarget: Identifiable, Hashable {
+    case new(someday: Bool)
+    case edit(UUID)
+
+    var id: String {
+        switch self {
+        case .new(let someday): "new|\(someday)"
+        case .edit(let id): id.uuidString
         }
     }
 }

@@ -37,6 +37,45 @@ enum TaskActions {
         await NotificationService.scheduleTaskNotifications(for: task, serverPushActive: serverPushActive)
     }
 
+    /// "Hộp chờ": no day, no reminder, no calendar event.
+    static func moveToBacklog(_ task: TaskItem) {
+        task.isSomeday = true
+        task.plannedAt = nil
+        task.ifThenSentence = nil
+        if task.status == .doing { task.status = .todo }
+        task.touch()
+        NotificationService.cancelReminder(for: task.id)
+        CalendarService.shared.removePlan(task)
+    }
+
+    /// Out of the "Hộp chờ" (or rescheduled): today without a time, or at `date`.
+    static func schedule(_ task: TaskItem, at date: Date?, serverPushActive: Bool) async {
+        task.isSomeday = false
+        task.plannedAt = date
+        task.ifThenSentence = nil
+        if task.status == .done || task.status == .cancelled { task.status = .todo }
+        task.touch()
+        if date != nil, task.calendarEventId != nil || UserDefaults.standard.bool(forKey: SettingsKey.addToCalendar) {
+            CalendarService.shared.writePlan(task)
+        } else if date == nil {
+            CalendarService.shared.removePlan(task)
+        }
+        await NotificationService.scheduleTaskNotifications(for: task, serverPushActive: serverPushActive)
+    }
+
+    /// Header menu on "Việc hôm nay": every task carried over from an earlier day at once.
+    static func postponeAll(_ tasks: [TaskItem], serverPushActive: Bool, now: Date = Date()) async {
+        for task in tasks where TodayList.isCarriedOver(task, now: now) {
+            await postponeToTomorrow(task, serverPushActive: serverPushActive, now: now)
+        }
+    }
+
+    static func backlogAll(_ tasks: [TaskItem], now: Date = Date()) {
+        for task in tasks where TodayList.isCarriedOver(task, now: now) {
+            moveToBacklog(task)
+        }
+    }
+
     /// Cancel: drop reminders and the calendar event.
     static func cancel(_ task: TaskItem) {
         task.status = .cancelled

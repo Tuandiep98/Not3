@@ -3,13 +3,13 @@ import SwiftData
 
 /// Two stores (README §7):
 /// - `notes.store`  — Folder / Note / ChecklistItem, synced through the user's private CloudKit DB.
-/// - `local.store`  — tasks, check-ins, chips, external items: source of truth is Supabase,
+/// - `local.store`  — tasks, repeating series, check-ins, chips, external items: source of truth is Supabase,
 ///                    so they stay on device (SwiftData = offline cache).
 enum Persistence {
     static let cloudKitContainer = "iCloud.com.tuandiep.not3"
 
     static let noteModels: [any PersistentModel.Type] = [Folder.self, Note.self, ChecklistItem.self]
-    static let localModels: [any PersistentModel.Type] = [TaskItem.self, CheckIn.self, Chip.self, ExternalItem.self]
+    static let localModels: [any PersistentModel.Type] = [TaskItem.self, TaskSeries.self, CheckIn.self, Chip.self, ExternalItem.self]
     static let schema = Schema(noteModels + localModels)
 
     /// Shared container so notification actions handled in the AppDelegate write to the same store.
@@ -153,6 +153,8 @@ enum Persistence {
             copy.updatedAt = t.updatedAt
             copy.completedAt = t.completedAt
             copy.calendarEventId = t.calendarEventId
+            copy.isSomeday = t.isSomeday
+            copy.seriesId = t.seriesId
             copy.needsSync = t.needsSync
             new.insert(copy)
         }
