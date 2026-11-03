@@ -4,10 +4,12 @@ import { buildCards } from "./cards.ts";
 import { linkAndSync } from "./links.ts";
 import {
   type ActivityRow,
+  adfText,
   githubActivity,
   type GithubActivityEvent,
-  jiraWorklogs,
+  jiraMyWorklogs,
   saveActivity,
+  worklogRows,
 } from "./activity.ts";
 import { ensureJiraWebhook, JIRA_WEBHOOK_SCOPE } from "./jira_webhook.ts";
 import { queueSilentRefresh } from "./push.ts";
@@ -49,6 +51,8 @@ export type ExternalItem = {
   scope?: string;
   /** Provider's own status name (Jira "Code Review"), for readable reasons. */
   status_name?: string;
+  /** Work log: time spent. */
+  duration_seconds?: number;
 };
 
 export type TokenSet = {
@@ -1090,6 +1094,8 @@ export async function fetchJira(
   rules: DoneRules = NO_DONE_RULES,
   /** Collects my work logs (real start + duration) when given. */
   activity?: ActivityRow[],
+  /** Start of the user's day: work logs from then on become journal lines. */
+  sinceIso: string = new Date(Date.now() - 86_400_000).toISOString(),
 ): Promise<ExternalItem[]> {
   const cloudId = String(meta.cloud_id ?? "");
   const site = String(meta.site_url ?? "");
@@ -1142,47 +1148,61 @@ export async function fetchJira(
       })),
     );
   }
-  if (settings.worklogs) {
-    const logged = await jiraSearch(
-      cloudId,
-      token,
-      "worklogAuthor = currentUser() AND worklogDate >= startOfDay()",
-      "summary,updated",
-    ).catch(() => [] as JiraIssue[]);
-    items.push(
-      ...logged.map((issue) => ({
-        source: "jira" as const,
-        external_id: `worklog:${issue.key}:${day}`,
-        kind: "worklog",
-        title: `Log work ${issue.key}: ${issue.fields.summary}`.slice(0, 120),
-        url: site ? `${site}/browse/${issue.key}` : null,
-        status: "done",
-        occurred_at: new Date(issue.fields.updated).toISOString(),
-        role: "author" as const,
-        scope: issue.key.split("-")[0],
-      })),
-    );
-  }
-  // Real time spent, for "Tổng kết tuần": started + timeSpentSeconds of my own logs (last 2 days,
-  // so a log added late for yesterday is still picked up; upserts keep it to one row).
-  if (activity && me) {
+  // My work logs (last 2 days, so a log added late for yesterday is still picked up):
+  // real time spent for "Tổng kết tuần", and today's ones as journal lines with their duration.
+  if (me && (activity || settings.worklogs)) {
     const recent = await jiraSearch(
       cloudId,
       token,
       "worklogAuthor = currentUser() AND worklogDate >= -2d",
       "summary",
     ).catch(() => [] as JiraIssue[]);
-    activity.push(
-      ...(await jiraWorklogs(
-        cloudId,
-        token.access_token,
-        me,
-        recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
-        new Date(Date.now() - 3 * 86_400_000),
-      )),
+    const logs = await jiraMyWorklogs(
+      cloudId,
+      token.access_token,
+      me,
+      recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
+      new Date(Date.now() - 3 * 86_400_000),
     );
+    activity?.push(
+      ...logs.flatMap(({ issue, log }) => worklogRows([log], me, issue)),
+    );
+    if (settings.worklogs) {
+      const since = new Date(sinceIso).getTime();
+      items.push(
+        ...logs
+          .filter(({ log }) => new Date(log.started).getTime() >= since)
+          .map(({ issue, log }) => worklogItem(issue, log, site)),
+      );
+    }
   }
   return items;
+}
+
+/** One work log → a journal line: its comment (else the ticket) and the time spent. */
+export function worklogItem(
+  issue: { key: string; summary: string },
+  log: {
+    id: string;
+    started: string;
+    timeSpentSeconds: number;
+    comment?: unknown;
+  },
+  site: string,
+): ExternalItem {
+  const text = adfText(log.comment) || `${issue.key}: ${issue.summary}`;
+  return {
+    source: "jira",
+    external_id: `worklog:${log.id}`,
+    kind: "worklog",
+    title: text.slice(0, 120),
+    url: site ? `${site}/browse/${issue.key}` : null,
+    status: "done",
+    occurred_at: new Date(log.started).toISOString(),
+    role: "author",
+    scope: issue.key.split("-")[0],
+    duration_seconds: log.timeSpentSeconds,
+  };
 }
 
 export function jiraItem(
@@ -1390,6 +1410,7 @@ export async function syncUser(
           jiraSettings(row.settings),
           doneRules(row.done_rules),
           activity,
+          sinceIso,
         );
       if (provider === "jira") {
         items.push(

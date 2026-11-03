@@ -21,7 +21,7 @@ final class SupabaseService {
     /// the user with no reminders at all.
     private(set) var hasServerPush = false
 
-    /// Last full refresh (foreground pass or the ↻ button on "Hôm nay").
+    /// Last full refresh (foreground pass or pull to refresh on "Hôm nay").
     private(set) var lastRefreshAt: Date? = UserDefaults.standard.object(forKey: "lastRefreshAt") as? Date
 
     func markRefreshed(at date: Date = Date()) {
@@ -374,18 +374,28 @@ final class SupabaseService {
     }
 
     /// "Đồng bộ ngay": server pulls GitHub/Jira, then the app pulls today's items.
-    func syncIntegrationsNow(_ context: ModelContext) async {
-        guard let client, userId != nil else { return }
+    /// Returns what went wrong, in the user's words ("Jira: Cần đăng nhập lại"), or nil.
+    @discardableResult
+    func syncIntegrationsNow(_ context: ModelContext) async -> String? {
+        guard let client, userId != nil else { return nil }
+        var problem: String?
         do {
-            try await client.functions.invoke(
+            let response: SyncResponse = try await client.functions.invoke(
                 "integrations",
                 options: FunctionInvokeOptions(body: IntegrationsRequest(action: "sync", timezone: TimeZone.current.identifier))
             )
+            let failed = response.errors.sorted { $0.key < $1.key }
+                .map { "\((ExternalSource(rawValue: $0.key)?.label) ?? $0.key): \($0.value)" }
+            problem = failed.isEmpty ? nil : failed.joined(separator: " · ")
+        } catch is CancellationError {
+            return nil
         } catch {
             lastError = error.localizedDescription
+            problem = "Không kết nối được máy chủ"
         }
         await pullExternalItems(context)
         await refreshIntegrations()
+        return problem
     }
 
     /// GitHub / Jira items from the server → local ExternalItem: everything from today (morning,
@@ -395,7 +405,7 @@ final class SupabaseService {
         let start = DayClock.startOfDay()
         do {
             let rows: [ExternalItemRecord] = try await client.from("external_items")
-                .select("source, external_id, title, url, status, kind, occurred_at, decision, role, scope")
+                .select("source, external_id, title, url, status, kind, occurred_at, decision, role, scope, duration_seconds")
                 .in("source", values: ["github", "jira"])
                 .or("occurred_at.gte.\(start.ISO8601Format()),and(decision.is.null,status.in.(open,review_requested,todo,in_progress))")
                 .order("occurred_at", ascending: false)
@@ -421,6 +431,7 @@ final class SupabaseService {
                 item.decision = row.decision
                 item.role = row.role
                 item.scope = row.scope
+                item.durationSeconds = row.durationSeconds
                 item.occurredAt = row.occurredAt
             }
             // Anything the server no longer lists (old and resolved) is dropped locally.

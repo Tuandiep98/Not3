@@ -110,7 +110,7 @@ struct ActivityHistoryView: View {
         .chartYAxis {
             AxisMarks(position: .trailing, values: [0, step, step * 2, step * 3]) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
-                AxisValueLabel { if let m = value.as(Int.self) { Text(m == 0 ? "0" : "\(m / 60)g") } }
+                AxisValueLabel { if let m = value.as(Int.self) { Text(m == 0 ? "0" : "\(m / 60)h") } }
             }
         }
         .chartXAxis {

@@ -429,6 +429,8 @@ final class ExternalItem {
     var role: String?
     /// owner/repo or Jira project key.
     var scope: String?
+    /// Jira work log: time spent.
+    var durationSeconds: Int?
 
     init(source: ExternalSource, externalId: String, title: String, url: String?, occurredAt: Date) {
         self.sourceRaw = source.rawValue

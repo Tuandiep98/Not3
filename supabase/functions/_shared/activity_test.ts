@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@1.0.8";
-import { githubActivity, worklogRows } from "./activity.ts";
+import { adfText, githubActivity, worklogRows } from "./activity.ts";
 
 Deno.test("activity: one row per own GitHub event, keyed by event id", () => {
   const rows = githubActivity([
@@ -64,4 +64,25 @@ Deno.test("activity: only my Jira work logs, with real start and end", () => {
   assertEquals(rows[0].started_at, "2026-11-03T02:00:00.000Z");
   assertEquals(rows[0].ended_at, "2026-11-03T03:30:00.000Z");
   assertEquals(rows[0].title, "APP-120: Push 12h");
+});
+
+Deno.test("activity: work log comment as plain text", () => {
+  assertEquals(
+    adfText({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Sửa bug" }, { type: "hardBreak" }, {
+            type: "text",
+            text: "login",
+          }],
+        },
+        { type: "paragraph", content: [{ type: "text", text: "và test" }] },
+      ],
+    }),
+    "Sửa bug login và test",
+  );
+  assertEquals(adfText(undefined), "");
+  assertEquals(adfText({ type: "doc", content: [] }), "");
 });

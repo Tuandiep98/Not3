@@ -148,15 +148,23 @@ enum AppLifecycle {
             context.insert(task)
             if done { task.status = .done }
         }
+        // A Jira work log in "Buổi sáng": its comment + the time spent chip.
+        let worklog = ExternalItem(source: .jira, externalId: "worklog:sample", title: "Review API đăng nhập với team backend",
+                                   url: "https://example.atlassian.net/browse/JIRA-120", occurredAt: DayClock.at(hour: 9, minute: 30))
+        worklog.kind = "worklog"; worklog.status = "done"; worklog.decision = "journal"; worklog.durationSeconds = 5400
+        context.insert(worklog)
         try? context.save()
     }
     #endif
 
-    /// App-bar refresh on "Hôm nay": ask the server to pull GitHub / Jira first, then the usual pass.
-    static func refreshNow() async {
+    /// Pull to refresh on "Hôm nay": ask the server to pull GitHub / Jira first, then the usual pass.
+    /// Returns what could not be synced ("Jira: Cần đăng nhập lại"), or nil.
+    @discardableResult
+    static func refreshNow() async -> String? {
         let context = Persistence.shared.mainContext
-        await SupabaseService.shared.syncIntegrationsNow(context)
+        let problem = await SupabaseService.shared.syncIntegrationsNow(context)
         await onForeground()
+        return problem
     }
 }
 

@@ -256,3 +256,29 @@ Deno.test("GitHub: 422 on search falls back to installed repos and reports the r
     "combined + split searches, then review-request, reviewed-by and mentions searches",
   );
 });
+
+Deno.test("Jira work log → journal line with its comment (else the ticket) and duration", async () => {
+  const { worklogItem } = await import("./integrations.ts");
+  const issue = { key: "APP-120", summary: "Push 12h" };
+  const log = {
+    id: "10",
+    started: "2026-11-03T09:00:00.000+0700",
+    timeSpentSeconds: 1800,
+  };
+  const withComment = worklogItem(issue, {
+    ...log,
+    comment: {
+      type: "doc",
+      content: [{
+        type: "paragraph",
+        content: [{ type: "text", text: "Review API" }],
+      }],
+    },
+  }, "https://x.atlassian.net");
+  assertEquals(withComment.title, "Review API");
+  assertEquals(withComment.duration_seconds, 1800);
+  assertEquals(withComment.external_id, "worklog:10");
+  assertEquals(withComment.status, "done");
+  assertEquals(withComment.url, "https://x.atlassian.net/browse/APP-120");
+  assertEquals(worklogItem(issue, log, "").title, "APP-120: Push 12h");
+});

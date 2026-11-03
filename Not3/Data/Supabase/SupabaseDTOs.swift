@@ -253,10 +253,12 @@ struct ExternalItemRecord: Codable, Sendable {
     var decision: String?
     var role: String?
     var scope: String?
+    /// Jira work log: time spent (nil otherwise; omitted when uploading).
+    var durationSeconds: Int?
 
     enum CodingKeys: String, CodingKey {
         case userId = "user_id", source, externalId = "external_id", title, url, status, kind
-        case occurredAt = "occurred_at", decision, role, scope
+        case occurredAt = "occurred_at", decision, role, scope, durationSeconds = "duration_seconds"
     }
 }
 
@@ -420,6 +422,30 @@ struct IntegrationsRequest: Encodable, Sendable {
     let action: String
     var provider: String?
     var timezone: String?
+}
+
+/// `{ result: { github: 12, jira: "Cần đăng nhập lại" } }`: a count per provider, or its error.
+struct SyncResponse: Decodable, Sendable {
+    /// Provider → error message, for the providers that failed.
+    let errors: [String: String]
+
+    private enum CodingKeys: String, CodingKey { case result }
+    private struct Key: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init?(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { nil }
+    }
+
+    init(from decoder: Decoder) throws {
+        let result = try decoder.container(keyedBy: CodingKeys.self)
+            .nestedContainer(keyedBy: Key.self, forKey: .result)
+        var errors: [String: String] = [:]
+        for key in result.allKeys {
+            if let message = try? result.decode(String.self, forKey: key) { errors[key.stringValue] = message }
+        }
+        self.errors = errors
+    }
 }
 
 struct ConnectResponse: Decodable, Sendable {

@@ -79,7 +79,9 @@ enum JournalService {
             }
             // Ticked in Apple Reminders: done work, like a task.
             if item.source == .reminders { return Entry(time: item.occurredAt, text: item.title, kind: .task) }
-            return Entry(time: item.occurredAt, text: item.title, kind: .activity(item.source))
+            // Jira work log: "Review API · 30m".
+            let text = item.durationSeconds.map { "\(item.title) · \(ActivityStyle.duration(seconds: $0))" } ?? item.title
+            return Entry(time: item.occurredAt, text: text, kind: .activity(item.source))
         }
         return entries.sorted { $0.time < $1.time }
     }

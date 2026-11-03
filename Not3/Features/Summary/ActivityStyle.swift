@@ -97,11 +97,16 @@ enum ActivityStyle {
         }
     }
 
-    /// "3g 10ph", "45ph", "2g"
+    /// "3h10m", "45m", "2h" — the app's one short form for hours / minutes.
     static func duration(_ minutes: Int) -> String {
         let h = minutes / 60, m = minutes % 60
-        if h == 0 { return "\(m)ph" }
-        return m == 0 ? "\(h)g" : "\(h)g \(String(format: "%02d", m))ph"
+        if h == 0 { return "\(m)m" }
+        return m == 0 ? "\(h)h" : "\(h)h\(m)m"
+    }
+
+    /// Seconds (a Jira work log) → "30m", "1h30m".
+    static func duration(seconds: Int) -> String {
+        duration(max(1, (seconds + 30) / 60))
     }
 
     /// Spoken / long form: "3 giờ 10 phút"

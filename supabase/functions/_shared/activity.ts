@@ -94,22 +94,26 @@ export function githubActivity(events: GithubActivityEvent[]): ActivityRow[] {
   return rows;
 }
 
-type JiraWorklog = {
+export type JiraWorklog = {
   id: string;
   started: string;
   timeSpentSeconds: number;
   author?: { accountId?: string };
+  /** Atlassian Document Format (REST v3). */
+  comment?: unknown;
 };
 
-/** My work logs on these issues that started after `since`: real start + duration. */
-export async function jiraWorklogs(
+export type JiraIssueRef = { key: string; summary: string };
+
+/** My work logs on these issues that started after `since`, with the issue they belong to. */
+export async function jiraMyWorklogs(
   cloudId: string,
   accessToken: string,
   me: string,
-  issues: { key: string; summary: string }[],
+  issues: JiraIssueRef[],
   since: Date,
-): Promise<ActivityRow[]> {
-  const rows: ActivityRow[] = [];
+): Promise<{ issue: JiraIssueRef; log: JiraWorklog }[]> {
+  const out: { issue: JiraIssueRef; log: JiraWorklog }[] = [];
   for (const issue of issues.slice(0, 20)) {
     const res = await fetch(
       `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${issue.key}/worklog?startedAfter=${since.getTime()}&maxResults=100`,
@@ -124,9 +128,29 @@ export async function jiraWorklogs(
     const data = (await res.json().catch(() => ({}))) as {
       worklogs?: JiraWorklog[];
     };
-    rows.push(...worklogRows(data.worklogs ?? [], me, issue));
+    for (const log of data.worklogs ?? []) {
+      if (log.author?.accountId === me && log.timeSpentSeconds > 0) {
+        out.push({ issue, log });
+      }
+    }
   }
-  return rows;
+  return out;
+}
+
+/** Plain text of an Atlassian Document Format value (a work log comment); "" when empty. */
+export function adfText(doc: unknown): string {
+  if (typeof doc === "string") return doc.trim();
+  const parts: string[] = [];
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    const n = node as { type?: string; text?: string; content?: unknown[] };
+    if (typeof n.text === "string") parts.push(n.text);
+    if (n.type === "hardBreak") parts.push(" ");
+    for (const child of n.content ?? []) walk(child);
+    if (n.type === "paragraph" || n.type === "listItem") parts.push(" ");
+  };
+  walk(doc);
+  return parts.join("").replace(/\s+/g, " ").trim();
 }
 
 export function worklogRows(

@@ -533,7 +533,7 @@ struct WeekBarsChart: View {
             AxisMarks(position: .trailing, values: Array(stride(from: 0, through: axisMax, by: axisMax / 3))) { value in
                 AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
                 AxisValueLabel {
-                    if let minutes = value.as(Int.self) { Text(minutes == 0 ? "0" : "\(minutes / 60)g") }
+                    if let minutes = value.as(Int.self) { Text(minutes == 0 ? "0" : "\(minutes / 60)h") }
                 }
             }
         }
