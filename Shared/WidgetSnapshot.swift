@@ -155,6 +155,56 @@ struct WidgetAction: Codable, Sendable {
     }
 }
 
+// MARK: Optimistic updates (widgets, controls, watch)
+
+extension WidgetSnapshot {
+    /// How the snapshot looks once the app has applied `action`, so widgets / the watch show
+    /// the change right away.
+    mutating func apply(_ action: WidgetAction) {
+        switch action.kind {
+        case .setTaskDone:
+            guard let id = action.taskId else { return }
+            let done = action.done ?? true
+            if let i = tasks.firstIndex(where: { $0.id == id }) {
+                tasks[i].status = done ? "done" : "todo"
+                tasks[i].reopenedReason = nil
+            }
+            if plan?.taskId == id { plan?.status = done ? "done" : "todo" }
+            if done, week.indices.contains(Self.weekdayIndex(action.at)) { week[Self.weekdayIndex(action.at)] = true }
+        case .startTask:
+            guard let id = action.taskId else { return }
+            if let i = tasks.firstIndex(where: { $0.id == id }), tasks[i].status == "todo" { tasks[i].status = "doing" }
+            if plan?.taskId == id, plan?.status == "todo" { plan?.status = "doing" }
+        case .recordMood:
+            mood = action.mood
+            checkInAt = action.at
+        case .addTask:
+            // A placeholder row; the app's next snapshot replaces it with the real task.
+            guard action.someday != true, let title = action.title, !title.isEmpty else { return }
+            tasks.append(TaskRow(id: UUID(), title: title, status: "todo", plannedAt: nil, durationMinutes: nil,
+                                 source: nil, reopenedReason: nil, createdAt: action.at))
+        case .addNote:
+            break
+        }
+    }
+
+    /// Monday = 0 … Sunday = 6.
+    static func weekdayIndex(_ date: Date) -> Int {
+        let weekday = Calendar(identifier: .gregorian).component(.weekday, from: date)  // 1 = Sunday
+        return (weekday + 5) % 7
+    }
+}
+
+extension WidgetAction {
+    /// Widgets / controls: update the App Group snapshot, then queue the action for the app.
+    func applyToSnapshotAndEnqueue() {
+        var snapshot = WidgetSnapshot.load()
+        snapshot.apply(self)
+        snapshot.save()
+        enqueue()
+    }
+}
+
 /// not3:// deep links used by widgets (and handled by the app's Router).
 enum DeepLink {
     static let today = URL(string: "not3://today")!

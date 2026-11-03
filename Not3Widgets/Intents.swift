@@ -19,15 +19,7 @@ struct ToggleTaskIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         guard let id = UUID(uuidString: taskID) else { return .result() }
-        var snapshot = WidgetSnapshot.load()
-        if let i = snapshot.tasks.firstIndex(where: { $0.id == id }) {
-            snapshot.tasks[i].status = done ? "done" : "todo"
-            snapshot.tasks[i].reopenedReason = nil
-        }
-        if snapshot.plan?.taskId == id { snapshot.plan?.status = done ? "done" : "todo" }
-        if done, let today = weekdayIndex() { snapshot.week[today] = true }
-        snapshot.save()
-        WidgetAction(kind: .setTaskDone, taskId: id, done: done).enqueue()
+        WidgetAction(kind: .setTaskDone, taskId: id, done: done).applyToSnapshotAndEnqueue()
         return .result()
     }
 }
@@ -43,13 +35,7 @@ struct StartTaskIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         guard let id = UUID(uuidString: taskID) else { return .result() }
-        var snapshot = WidgetSnapshot.load()
-        if let i = snapshot.tasks.firstIndex(where: { $0.id == id }), snapshot.tasks[i].status == "todo" {
-            snapshot.tasks[i].status = "doing"
-        }
-        if snapshot.plan?.taskId == id, snapshot.plan?.status == "todo" { snapshot.plan?.status = "doing" }
-        snapshot.save()
-        WidgetAction(kind: .startTask, taskId: id).enqueue()
+        WidgetAction(kind: .startTask, taskId: id).applyToSnapshotAndEnqueue()
         return .result()
     }
 }
@@ -64,19 +50,9 @@ struct RecordMoodIntent: AppIntent {
     init(mood: String) { self.mood = mood }
 
     func perform() async throws -> some IntentResult {
-        var snapshot = WidgetSnapshot.load()
-        snapshot.mood = mood
-        snapshot.checkInAt = Date()
-        snapshot.save()
-        WidgetAction(kind: .recordMood, mood: mood).enqueue()
+        WidgetAction(kind: .recordMood, mood: mood).applyToSnapshotAndEnqueue()
         return .result()
     }
-}
-
-/// Monday = 0 … Sunday = 6.
-private func weekdayIndex(_ date: Date = Date()) -> Int? {
-    let weekday = Calendar(identifier: .gregorian).component(.weekday, from: date)  // 1 = Sunday
-    return (weekday + 5) % 7
 }
 
 // MARK: Folder picker for the "Thư mục ghi chú" widget

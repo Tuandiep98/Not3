@@ -59,6 +59,7 @@ enum AppLifecycle {
         CalendarService.shared.startObserving()
         WidgetBridge.startObserving()
         SpotlightIndexer.startObserving()
+        WatchBridge.shared.start()
         NotificationService.registerCategories()
         // Permission is asked in context (first check-in save), not on first launch.
         UIApplication.shared.registerForRemoteNotifications()

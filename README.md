@@ -560,6 +560,8 @@ Trong Supabase Dashboard, bật provider **Apple** ở Authentication → Provid
 - [x] Tự cập nhật: sau mọi lần lưu SwiftData (debounce), khi vào nền, BGAppRefreshTask (~30 phút) và silent push từ server khi GitHub / Jira đổi task (`_shared/push.ts`, tối đa 1 lần / 10 phút)
 - [x] Deep link `not3://today | checkin | summary | folder/<id> | note/<id> | new-note`
 - [x] DEBUG: `-widgetGallery` (`-widgetGallery2`) vẽ mọi trạng thái widget trên simulator
+- [x] Apple Watch (`Not3Watch`, watchOS 11): Hôm nay (chạm = tích, vuốt = Bắt đầu, "↺ Bị trả lại"), check-in 3 nút cảm nhận, kế hoạch chiều + Bắt đầu, "Thêm việc" bằng đọc chính tả. Đồng bộ qua WatchConnectivity (`Services/WatchBridge.swift`): iPhone gửi cùng snapshot với widget, Watch gửi lại `WidgetAction` → hàng đợi widget → `applyPendingActions`. Thông báo + nút trả lời nhanh trên iPhone tự hiện trên đồng hồ
+- [x] Complication (`Not3WatchWidgets`): vòng "Tuần này" (tròn), "Việc tiếp theo" (chữ nhật / dòng)
 - [ ] Live Activity đếm ngược phiên (nút "Bắt đầu" hiện chỉ chuyển việc sang Đang làm)
 - [x] Ảnh trong ghi chú (`NoteAttachment`, đồng bộ qua iCloud, không gửi Supabase / AI): chọn từ Thư viện hoặc chụp; JPEG ≤ 2048 px + thumbnail; xem toàn màn hình, chia sẻ, xoá
 - [x] Checklist: kéo tay nắm để sắp xếp, "Dồn mục xong xuống dưới", nhấn giữ tay nắm → "Thành việc"; danh sách ghi chú hiện "☑︎ 3/5" và số ảnh

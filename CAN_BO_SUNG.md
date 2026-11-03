@@ -479,6 +479,18 @@ supabase functions deploy sync-integrations poll-active webhook-github webhook-j
 
 Thử: một việc có liên kết ticket Jira `ABC-1`, rồi mở một PR có tiêu đề chứa `ABC-1` → sau lần đồng bộ tiếp theo, dưới việc có dòng tóm tắt; logo GitHub + Jira chạm vào ra danh sách từng mục.
 
+## M. Apple Watch
+
+### - [ ] M1. App ID + ký
+
+Hai target mới: `com.tuandiep.not3.watchkitapp` (app) và `com.tuandiep.not3.watchkitapp.widgets` (complication), cả hai cần App Group `group.com.tuandiep.not3`. Ký tự động trên Mac sẽ tự tạo. Nếu Xcode Cloud báo lỗi provisioning: tạo 2 App ID ở [developer.apple.com](https://developer.apple.com/account/resources/identifiers/list), bật **App Groups** → chọn `group.com.tuandiep.not3`. Archive của app iPhone tự mang theo app Watch.
+
+### - [ ] M2. Thử
+
+- Cài Not3 lên iPhone → app **Watch** trên iPhone → Not3 → **Cài đặt**. Mở Not3 trên iPhone một lần để gửi dữ liệu sang.
+- Trên đồng hồ: tích một việc → iPhone và widget cập nhật (ngay nếu iPhone ở gần; nếu không thì ở lần kết nối sau).
+- Mặt đồng hồ: nhấn giữ → Sửa → Complication → Not3 → *Tuần này* / *Việc tiếp theo*.
+
 ## F. Quyết định sản phẩm (còn mở trong doc kế hoạch)
 
 - [ ] **F1. Kiếm tiền**: miễn phí + gói Pro (tích hợp, tổng kết AI) hay trả một lần? Ảnh hưởng tới giai đoạn 4 (StoreKit, giới hạn tính năng).
