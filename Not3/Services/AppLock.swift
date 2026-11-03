@@ -44,12 +44,12 @@ final class AppLock {
     func didEnterBackground() {
         guard AppSettings.appLockEnabled else { return }
         if backgroundedAt == nil { backgroundedAt = Date() }
-        isObscured = true
+        isObscured = AppSettings.obscureSwitcher
         updateCover()
     }
 
     func willResignActive() {
-        guard AppSettings.appLockEnabled else { return }
+        guard AppSettings.appLockEnabled, AppSettings.obscureSwitcher else { return }
         isObscured = true
         updateCover()
     }

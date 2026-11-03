@@ -32,10 +32,12 @@ enum SpotlightIndexer {
     static func update() {
         let context = Persistence.shared.mainContext
         var entries: [String: (signature: String, item: () -> CSSearchableItem)] = [:]
-        for note in NoteEntityQuery.notes() {
+        // "Không hiện": nothing indexed; everything indexed before is removed below.
+        let notes = AppSettings.spotlightPrivacy == .hidden ? [] : NoteEntityQuery.notes()
+        for note in notes {
             entries[identifier(note: note.id)] = (signature(note), { item(for: note) })
         }
-        let tasks = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+        let tasks = AppSettings.spotlightPrivacy == .hidden ? [] : (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
         for task in tasks where task.status == .todo || task.status == .doing {
             entries[identifier(task: task.id)] = (signature(task), { item(for: task) })
         }
@@ -70,18 +72,18 @@ enum SpotlightIndexer {
     }
 
     private static func signature(_ note: Note) -> String {
-        "\(note.updatedAt.timeIntervalSince1970)|\(note.folder?.name ?? "")|\(AppSettings.appLockEnabled)"
+        "\(note.updatedAt.timeIntervalSince1970)|\(note.folder?.name ?? "")|\(AppSettings.spotlightPrivacy.rawValue)"
     }
 
     private static func signature(_ task: TaskItem) -> String {
-        "\(task.updatedAt.timeIntervalSince1970)|\(task.statusRaw)|\(DayClock.isoDay(Date()))|\(AppSettings.appLockEnabled)"
+        "\(task.updatedAt.timeIntervalSince1970)|\(task.statusRaw)|\(DayClock.isoDay(Date()))|\(AppSettings.spotlightPrivacy.rawValue)"
     }
 
     static func item(for note: Note) -> CSSearchableItem {
         let attributes = CSSearchableItemAttributeSet(contentType: .text)
         attributes.title = note.displayTitle
-        // App lock on: titles only, the content stays behind Face ID.
-        if !AppSettings.appLockEnabled {
+        // "Chỉ tiêu đề": the content stays in the app.
+        if AppSettings.spotlightPrivacy == .full {
             attributes.contentDescription = [note.folder?.name, note.preview].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
             attributes.textContent = ([note.body] + note.sortedChecklist.map(\.text)).joined(separator: "\n")
         }
@@ -95,7 +97,7 @@ enum SpotlightIndexer {
     static func item(for task: TaskItem) -> CSSearchableItem {
         let attributes = CSSearchableItemAttributeSet(contentType: .text)
         attributes.title = task.title
-        attributes.contentDescription = TaskEntity.detail(for: task)
+        if AppSettings.spotlightPrivacy == .full { attributes.contentDescription = TaskEntity.detail(for: task) }
         attributes.keywords = [task.category, "việc"].compactMap { $0 }
         attributes.contentModificationDate = task.updatedAt
         let item = CSSearchableItem(uniqueIdentifier: identifier(task: task.id), domainIdentifier: "\(domain).tasks", attributeSet: attributes)

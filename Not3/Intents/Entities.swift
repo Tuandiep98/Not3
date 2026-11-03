@@ -56,6 +56,8 @@ struct TaskEntityQuery: EntityStringQuery {
     /// Open work of today, then the "Hộp chờ".
     func suggestedEntities() async throws -> [TaskEntity] {
         await MainActor.run {
+            // No task names in Siri / Shortcuts pickers on a locked iPhone.
+            guard !IntentPrivacy.isRestricted else { return [] }
             let all = TaskEntityQuery.allTasks()
             let open = TodayList.tasks(all).filter { $0.status != .done } + TodayList.backlog(all)
             return open.map(TaskEntity.init)
@@ -64,7 +66,8 @@ struct TaskEntityQuery: EntityStringQuery {
 
     func entities(matching string: String) async throws -> [TaskEntity] {
         await MainActor.run {
-            TaskEntityQuery.allTasks()
+            guard !IntentPrivacy.isRestricted else { return [] }
+            return TaskEntityQuery.allTasks()
                 .filter { ($0.status == .todo || $0.status == .doing) && $0.title.localizedStandardContains(string) }
                 .map(TaskEntity.init)
         }
@@ -106,12 +109,16 @@ struct NoteEntityQuery: EntityStringQuery {
     }
 
     func suggestedEntities() async throws -> [NoteEntity] {
-        await MainActor.run { NoteEntityQuery.notes().prefix(10).map(NoteEntity.init) }
+        await MainActor.run {
+            guard !IntentPrivacy.isRestricted else { return [] }
+            return NoteEntityQuery.notes().prefix(10).map(NoteEntity.init)
+        }
     }
 
     func entities(matching string: String) async throws -> [NoteEntity] {
         await MainActor.run {
-            NoteEntityQuery.notes()
+            guard !IntentPrivacy.isRestricted else { return [] }
+            return NoteEntityQuery.notes()
                 .filter { $0.title.localizedStandardContains(string) || $0.body.localizedStandardContains(string) }
                 .map(NoteEntity.init)
         }

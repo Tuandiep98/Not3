@@ -159,6 +159,7 @@ struct SettingsView: View {
                     ForEach(AppLock.Delay.allCases) { Text($0.label).tag($0.rawValue) }
                 }
             }
+            NavigationLink("Hiển thị khi khoá") { LockScreenPrivacyView() }
             Button {
                 Task { await export() }
             } label: {
@@ -177,7 +178,7 @@ struct SettingsView: View {
         } header: {
             Text("Bảo mật & dữ liệu")
         } footer: {
-            Text("Khi khoá: widget ẩn nội dung lúc máy khoá, Spotlight chỉ hiện tiêu đề. Bản xuất là tệp .zip gồm ghi chú Markdown kèm ảnh, việc (Markdown + JSON), check-in và việc lặp lại.")
+            Text("\"Hiển thị khi khoá\" chọn widget, Spotlight và Siri hiện gì khi iPhone khoá (bật khoá thì mặc định ẩn nội dung). Bản xuất là tệp .zip gồm ghi chú Markdown kèm ảnh, việc (Markdown + JSON), check-in và việc lặp lại.")
         }
     }
 

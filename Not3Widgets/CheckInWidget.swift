@@ -10,8 +10,9 @@ struct CheckInWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKind.checkIn, provider: SnapshotProvider()) { entry in
             CheckInWidgetView(entry: entry)
-                // App lock on: hidden on the Lock Screen / locked device.
-                .privacySensitive(entry.snapshot.isPrivate == true)
+                // "Hiển thị khi khoá": redacted while the device is locked.
+                .privacySensitive(entry.snapshot.hidesAll)
+                .environment(\.hidesPrivateContent, entry.snapshot.hidesContent)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Check-in")
@@ -65,7 +66,7 @@ struct CheckInWidgetView: View {
         case .morning: Text("\(checkInLabel) · \(morning.count) mục")
         case .waiting: Text("\(checkInLabel) · chờ bạn")
         case .planned:
-            if let task = nextTask { Text("\(task.plannedAt.map(WFormat.time) ?? "Tiếp") \(task.title)") } else { Text("Hôm nay xong việc") }
+            if let task = nextTask { Text("\(task.plannedAt.map(WFormat.time) ?? "Tiếp") \(task.title)").privateContent() } else { Text("Hôm nay xong việc") }
         }
     }
 
@@ -75,10 +76,10 @@ struct CheckInWidgetView: View {
             case .morning, .waiting:
                 Text(checkInLabel).font(.headline).widgetAccentable()
                 Text(morning.isEmpty ? "Sáng nay thế nào?" : "\(morning.count) mục chờ xác nhận").font(.caption)
-                Text(morning.suffix(2).map(\.title).joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(morning.suffix(2).map(\.title).joined(separator: ", ")).font(.caption2).foregroundStyle(.secondary).lineLimit(1).privateContent()
             case .planned:
                 Text("Việc tiếp theo").font(.caption).foregroundStyle(.secondary)
-                Text(nextTask?.title ?? "Không còn việc nào").font(.headline).lineLimit(1).widgetAccentable()
+                Text(nextTask?.title ?? "Không còn việc nào").font(.headline).lineLimit(1).widgetAccentable().privateContent()
                 if let task = nextTask { Text(WFormat.detail(task, now: entry.date)).font(.caption) }
             }
         }
@@ -120,7 +121,7 @@ struct CheckInWidgetView: View {
                 ForEach(morning.suffix(3)) { item in
                     HStack(spacing: 8) {
                         SourceMark(source: item.source, size: 13)
-                        Text(item.title).font(.subheadline.weight(.medium)).lineLimit(1)
+                        Text(item.title).font(.subheadline.weight(.medium)).lineLimit(1).privateContent()
                         Spacer(minLength: 4)
                         Text(WFormat.time(item.time)).font(.caption).foregroundStyle(.secondary).monospacedDigit()
                     }
@@ -140,7 +141,7 @@ struct CheckInWidgetView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Sáng nay thế nào?").font(.headline)
             Text(morning.isEmpty ? "Chạm một ô để ghi lại" : morning.suffix(3).map { $0.title.components(separatedBy: " · ").first ?? $0.title }.joined(separator: ", "))
-                .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(1).privateContent()
             Spacer(minLength: 6)
             HStack(spacing: 8) {
                 ForEach([("good", "Hiệu quả"), ("ok", "Bình thường"), ("empty", "Trống")], id: \.0) { mood, label in
@@ -164,7 +165,7 @@ struct CheckInWidgetView: View {
     private var planBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let plan = s.plan {
-                Text(plan.sentence).font(.headline).lineLimit(2).minimumScaleFactor(0.85)
+                Text(plan.sentence).font(.headline).lineLimit(2).minimumScaleFactor(0.85).privateContent()
                 Spacer(minLength: 0)
                 switch plan.status {
                 case "done":
@@ -186,7 +187,7 @@ struct CheckInWidgetView: View {
                     .buttonStyle(.plain).foregroundStyle(.white).background(WStyle.band, in: .capsule)
                 }
             } else {
-                Text(nextTask.map { "Tiếp theo: \($0.title)" } ?? "Không còn việc nào hôm nay").font(.headline).lineLimit(2)
+                Text(nextTask.map { "Tiếp theo: \($0.title)" } ?? "Không còn việc nào hôm nay").font(.headline).lineLimit(2).privateContent()
                 Spacer(minLength: 0)
                 Text("Đã check-in sáng nay").font(.caption).foregroundStyle(.secondary)
             }

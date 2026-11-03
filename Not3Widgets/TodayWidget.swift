@@ -8,8 +8,9 @@ struct TodayWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKind.today, provider: SnapshotProvider()) { entry in
             TodayWidgetView(entry: entry)
-                // App lock on: hidden on the Lock Screen / locked device.
-                .privacySensitive(entry.snapshot.isPrivate == true)
+                // "Hiển thị khi khoá": redacted while the device is locked.
+                .privacySensitive(entry.snapshot.hidesAll)
+                .environment(\.hidesPrivateContent, entry.snapshot.hidesContent)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Việc hôm nay")
@@ -57,7 +58,7 @@ struct TodayWidgetView: View {
                     ForEach(s.morning.suffix(3)) { item in
                         HStack(spacing: 8) {
                             SourceMark(source: item.source, size: 12)
-                            Text(item.title).font(.footnote).lineLimit(1)
+                            Text(item.title).font(.footnote).lineLimit(1).privateContent()
                             Spacer(minLength: 4)
                             Text(WFormat.time(item.time)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
                         }
@@ -119,8 +120,9 @@ struct TaskRowView: View {
                     .strikethrough(task.isDone)
                     .foregroundStyle(task.isDone ? .secondary : .primary)
                     .lineLimit(1)
+                    .privateContent()
                 if let reason = task.reopenedReason {
-                    Text("↺ \(reason)").font(.caption2.weight(.medium)).foregroundStyle(.orange).lineLimit(1)
+                    Text("↺ \(reason)").font(.caption2.weight(.medium)).foregroundStyle(.orange).lineLimit(1).privateContent()
                 } else {
                     let detail = WFormat.detail(task, now: now)
                     if !detail.isEmpty { Text(detail).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }

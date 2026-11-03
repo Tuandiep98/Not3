@@ -8,8 +8,9 @@ struct FolderWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: WidgetKind.folder, intent: SelectFolderIntent.self, provider: FolderProvider()) { entry in
             FolderWidgetView(entry: entry)
-                // App lock on: hidden on the Lock Screen / locked device.
-                .privacySensitive(entry.snapshot.isPrivate == true)
+                // "Hiển thị khi khoá": redacted while the device is locked.
+                .privacySensitive(entry.snapshot.hidesAll)
+                .environment(\.hidesPrivateContent, entry.snapshot.hidesContent)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Thư mục ghi chú")
@@ -66,12 +67,12 @@ struct FolderWidgetView: View {
     private func noteCell(_ note: WidgetSnapshot.NoteRow) -> some View {
         Link(destination: DeepLink.note(note.id)) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(note.title).font(.footnote.weight(.semibold)).lineLimit(1)
+                Text(note.title).font(.footnote.weight(.semibold)).lineLimit(1).privateContent()
                 HStack(spacing: 4) {
                     Text(Calendar.current.isDateInToday(note.updatedAt) ? WFormat.time(note.updatedAt)
                          : note.updatedAt.formatted(.dateTime.day().month(.defaultDigits)))
                         .foregroundStyle(Color.primary)
-                    Text(note.preview).foregroundStyle(Color.secondary)
+                    Text(note.preview).foregroundStyle(Color.secondary).privateContent()
                 }
                 .font(.caption2)
                 .lineLimit(1)

@@ -26,6 +26,29 @@ extension Color {
 }
 #endif
 
+// MARK: Privacy
+
+extension EnvironmentValues {
+    /// "Hiển thị khi khoá" = hide content: set from the snapshot at each widget's root.
+    @Entry var hidesPrivateContent = false
+}
+
+private struct PrivateContent: ViewModifier {
+    @Environment(\.hidesPrivateContent) private var hides
+
+    func body(content: Content) -> some View {
+        content.privacySensitive(hides)
+    }
+}
+
+extension View {
+    /// Task / note titles and other personal text: redacted on a locked device when the user
+    /// chose "Ẩn nội dung" (headers and counts stay readable).
+    func privateContent() -> some View {
+        modifier(PrivateContent())
+    }
+}
+
 /// Coloured header band with a title (and optional trailing text / view).
 struct WidgetHeader<Trailing: View>: View {
     let title: String

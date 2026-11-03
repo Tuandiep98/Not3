@@ -86,8 +86,14 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
     var tasks: [TaskRow]             // "Việc hôm nay" (same rules as the app)
     var week: [Bool]                 // Mon…Sun: a meaningful day?
     var folders: [FolderRow]         // first = all notes
-    /// App lock (Face ID) is on: widgets redact their content when the device is locked.
-    var isPrivate: Bool? = nil
+    /// "Hiển thị khi khoá" for widgets: full / content / all (nil = full). Redaction only
+    /// happens while the device is locked (Lock Screen, Today view, StandBy, watch face).
+    var privacy: String? = nil
+
+    /// Task / note titles, if–then sentences, morning items.
+    var hidesContent: Bool { privacy == "content" || privacy == "all" }
+    /// The whole widget, headers and counts included.
+    var hidesAll: Bool { privacy == "all" }
 
     var meaningfulDays: Int { week.filter { $0 }.count }
     var openTasks: [TaskRow] { tasks.filter { !$0.isDone } }

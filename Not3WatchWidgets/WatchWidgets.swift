@@ -48,6 +48,7 @@ struct WeekComplication: Widget {
                 Text("\(days)")
             }
             .gaugeStyle(.accessoryCircular)
+            .privacySensitive(entry.snapshot.hidesAll)
             .widgetURL(DeepLink.today)
             .containerBackground(for: .widget) { Color.clear }
             .accessibilityLabel("\(days) trên 7 ngày có làm được việc")
@@ -62,7 +63,7 @@ struct NextTaskComplication: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: "Not3WatchNext", provider: WatchProvider()) { entry in
             NextTaskComplicationView(entry: entry)
-                .privacySensitive(entry.snapshot.isPrivate == true)
+                .privacySensitive(entry.snapshot.hidesAll)
                 .widgetURL(DeepLink.today)
                 .containerBackground(for: .widget) { Color.clear }
         }
@@ -84,6 +85,7 @@ private struct NextTaskComplicationView: View {
         case .accessoryInline:
             if let next {
                 Text([time, next.title].compactMap { $0 }.joined(separator: " "))
+                    .privacySensitive(entry.snapshot.hidesContent)
             } else {
                 Text("Not3 · không còn việc")
             }
@@ -96,6 +98,7 @@ private struct NextTaskComplicationView: View {
                 Text(next?.title ?? "Không còn việc hôm nay")
                     .font(.headline)
                     .lineLimit(2)
+                    .privacySensitive(entry.snapshot.hidesContent)
                 if left > 0 {
                     Text([time, "còn \(left) việc"].compactMap { $0 }.joined(separator: " · "))
                         .font(.caption2)
