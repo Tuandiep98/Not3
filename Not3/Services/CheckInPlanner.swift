@@ -27,9 +27,10 @@ struct TimeOption: Identifiable, Hashable, Sendable {
 /// (README §10: most-used chips + categories missing in the last 7 days).
 enum CheckInPlanner {
     /// Time chips computed from now, past times removed.
-    static func timeOptions(now: Date = Date()) -> [TimeOption] {
-        let slots: [(Int, Int)] = [(14, 0), (15, 30), (17, 0)]
-        var options = slots.compactMap { hour, minute -> TimeOption? in
+    /// `slots` are minutes after midnight (the user's list from "Tuỳ chỉnh lựa chọn").
+    static func timeOptions(now: Date = Date(), slots: [Int] = AppSettings.checkInTimeSlots) -> [TimeOption] {
+        var options = slots.sorted().compactMap { slot -> TimeOption? in
+            let hour = slot / 60, minute = slot % 60
             let date = DayClock.at(hour: hour, minute: minute, on: now)
             guard date > now else { return nil }
             let label = String(format: "%02d:%02d", hour, minute)
@@ -75,8 +76,8 @@ enum CheckInPlanner {
             let lMissing = !usedThisWeek.contains(lhs.label)
             let rMissing = !usedThisWeek.contains(rhs.label)
             if lMissing != rMissing { return lMissing }
-            let lWork = lhs.label == ChipCatalog.workCategory
-            let rWork = rhs.label == ChipCatalog.workCategory
+            let lWork = lhs.isWork
+            let rWork = rhs.isWork
             if lWork != rWork { return !lWork }
             return false
         }
@@ -98,7 +99,7 @@ enum CheckInPlanner {
     }
 
     /// Chips used most in the last 14 days first; chips unused for 30 days are hidden
-    /// (built-ins stay so the row is never empty).
+    /// (built-ins and chips added in Cài đặt but never used yet stay, so the row is never empty).
     static func rankedCategories(_ chips: [Chip], now: Date = Date()) -> [Chip] {
         let cal = DayClock.calendar
         let twoWeeksAgo = cal.date(byAdding: .day, value: -14, to: now) ?? now
@@ -106,7 +107,7 @@ enum CheckInPlanner {
         return chips
             .filter { $0.group == .category }
             .filter { chip in
-                guard let last = chip.lastUsedAt else { return chip.isBuiltIn }
+                guard let last = chip.lastUsedAt else { return true }
                 return last >= monthAgo || chip.isBuiltIn
             }
             .sorted { lhs, rhs in

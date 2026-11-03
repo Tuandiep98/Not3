@@ -40,6 +40,7 @@ struct SettingsView: View {
                 Toggle("Hỏi lại buổi tối", isOn: $eveningCheckIn)
                 Toggle("Thông báo dự phòng trên máy", isOn: $localFallback)
                 NavigationLink("Việc lặp lại") { RecurringTasksView() }
+                NavigationLink("Tuỳ chỉnh lựa chọn") { CheckInOptionsView() }
             } header: {
                 Text("Check-in")
             } footer: {

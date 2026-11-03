@@ -24,10 +24,12 @@ private struct NoteEditorContent: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(Router.self) private var router
     @Query private var chips: [Chip]
+    @AppStorage(SettingsKey.checkInDurations) private var durationsRaw = IntList.encode(ChipCatalog.defaultDurations)
     @FocusState private var focus: Field?
     @State private var isShowingVoice = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var isShowingCamera = false
+    @State private var editingCategory: CategoryEdit?
 
     private enum Field: Hashable {
         case title, body
@@ -175,12 +177,18 @@ private struct NoteEditorContent: View {
                     }
                     .accessibilityLabel("Dồn mục đã xong xuống dưới")
                 }
-                ForEach(CheckInPlanner.rankedCategories(chips)) { chip in
+                let ranked = CheckInPlanner.rankedCategories(chips)
+                ForEach(ranked) { chip in
                     ChipButton(title: chip.label, isOn: note.categories.contains(chip.label)) {
                         toggleCategory(chip.label)
                     }
+                    .categoryChipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
+                        ChipStore.deleteCategory(chip, in: context)
+                    }
                 }
-                ForEach([25, 45], id: \.self) { minutes in
+                ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new }
+                    .accessibilityLabel("Thêm danh mục")
+                ForEach(durationOptions, id: \.self) { minutes in
                     ChipButton(title: "\(minutes)p", isOn: note.durationMinutes == minutes) {
                         note.durationMinutes = note.durationMinutes == minutes ? nil : minutes
                         note.needsSync = true
@@ -189,6 +197,22 @@ private struct NoteEditorContent: View {
             }
             .padding(.vertical, 4)
         }
+        .categoryEditor($editingCategory) { old, new in
+            // New one goes on this note; a rename of one it has follows it.
+            if let old, let index = note.categories.firstIndex(of: old) {
+                note.categories[index] = new
+                note.needsSync = true
+            } else if old == nil {
+                toggleCategory(new)
+            }
+        }
+    }
+
+    /// The user's durations, plus the note's own one when it is not in the list.
+    private var durationOptions: [Int] {
+        let list = IntList.decode(durationsRaw)
+        guard let own = note.durationMinutes, !list.contains(own) else { return list }
+        return (list + [own]).sorted()
     }
 
     private var shareText: String {

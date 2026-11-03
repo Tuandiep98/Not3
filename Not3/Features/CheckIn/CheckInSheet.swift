@@ -9,6 +9,8 @@ struct CheckInSheet: View {
     @Environment(SupabaseService.self) private var supabase
     @Environment(CalendarService.self) private var calendar
     @AppStorage(SettingsKey.addToCalendar) private var addToCalendar = true
+    @AppStorage(SettingsKey.checkInDurations) private var durationsRaw = IntList.encode(ChipCatalog.defaultDurations)
+    @AppStorage(SettingsKey.checkInTimeSlots) private var timeSlotsRaw = IntList.encode(ChipCatalog.defaultTimeSlots)
     @Query private var chips: [Chip]
     @Query(sort: \TaskItem.createdAt, order: .reverse) private var tasks: [TaskItem]
     @Query(sort: \ExternalItem.occurredAt) private var externalItems: [ExternalItem]
@@ -22,7 +24,7 @@ struct CheckInSheet: View {
     @State private var selectedTask: AfternoonSuggestion?
     @State private var timeOptions: [TimeOption] = []
     @State private var selectedTime: TimeOption?
-    @State private var duration: Int? = 25
+    @State private var duration: Int?
     @State private var addingMode: AddMode?
     @State private var draftText = ""
     @State private var isShowingVoice = false
@@ -163,15 +165,37 @@ struct CheckInSheet: View {
                     ChipButton(title: option.label, isOn: selectedTime == option) {
                         selectedTime = selectedTime == option ? nil : option
                     }
+                    .contextMenu {
+                        // Only the user's own slots: "Tối nay" and voice times are not in the list.
+                        let slot = ChipStore.slot(of: option.date)
+                        if option.id != "evening", IntList.decode(timeSlotsRaw).contains(slot) {
+                            Button("Bỏ mốc \(option.label)", systemImage: "trash", role: .destructive) {
+                                removeTime(option, slot: slot)
+                            }
+                        }
+                    }
                 }
+                AddTimeChip(onAdded: addTime)
             }
             ChipGroupContainer {
-                ForEach(ChipCatalog.durations, id: \.self) { minutes in
+                ForEach(durationOptions, id: \.self) { minutes in
                     ChipButton(title: "\(minutes) phút", isOn: duration == minutes) {
                         duration = duration == minutes ? nil : minutes
                     }
+                    .contextMenu {
+                        let list = IntList.decode(durationsRaw)
+                        if list.contains(minutes), list.count > 1 {
+                            Button("Bỏ \(minutes) phút", systemImage: "trash", role: .destructive) {
+                                durationsRaw = ChipStore.removing(minutes, from: durationsRaw)
+                            }
+                        }
+                    }
                 }
+                AddDurationChip { duration = $0 }
             }
+            Text("Nhấn giữ một mốc để bỏ khỏi danh sách.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
             Toggle(isOn: $addToCalendar) {
                 Label("Thêm vào Lịch", systemImage: "calendar.badge.plus")
             }
@@ -223,6 +247,15 @@ struct CheckInSheet: View {
             + CheckInPlanner.backlogSuggestions(tasks)
         timeOptions = CheckInPlanner.timeOptions(now: now)
         selectedTime = timeOptions.first
+        let durations = IntList.decode(durationsRaw)
+        duration = durations.contains(ChipCatalog.preferredDuration) ? ChipCatalog.preferredDuration : durations.first
+    }
+
+    /// The user's durations, plus one a suggestion / voice brought in that is not in the list.
+    private var durationOptions: [Int] {
+        let list = IntList.decode(durationsRaw)
+        guard let duration, !list.contains(duration) else { return list }
+        return (list + [duration]).sorted()
     }
 
     private func todaysExternalTitles(now: Date = Date()) -> [String] {
@@ -291,7 +324,7 @@ struct CheckInSheet: View {
                                                   durationMinutes: task.durationMinutes, taskId: task.id))
             } else if let item = externalItems.first(where: { $0.title == title && $0.occurredAt >= start }),
                       item.source != .calendar {
-                result.append(AfternoonSuggestion(title: title, category: ChipCatalog.workCategory, source: .integration,
+                result.append(AfternoonSuggestion(title: title, category: ChipStore.workCategoryName(chips), source: .integration,
                                                   externalKey: "\(item.sourceRaw)|\(item.externalId)"))
             } else {
                 result.append(AfternoonSuggestion(title: title, category: nil, source: .manual))
@@ -346,6 +379,25 @@ struct CheckInSheet: View {
                 selectedTime = option
             }
         }
+    }
+
+    /// "+" in the time row: the new slot is saved to the list and picked for today if still ahead.
+    private func addTime(_ slot: Int) {
+        let date = DayClock.at(hour: slot / 60, minute: slot % 60)
+        guard date > Date() else { return }
+        let label = ChipStore.slotLabel(slot)
+        let option = timeOptions.first { $0.id == label } ?? TimeOption(id: label, label: label, date: date)
+        if !timeOptions.contains(option) {
+            timeOptions.append(option)
+            timeOptions.sort { $0.date < $1.date }
+        }
+        selectedTime = option
+    }
+
+    private func removeTime(_ option: TimeOption, slot: Int) {
+        timeSlotsRaw = ChipStore.removing(slot, from: timeSlotsRaw)
+        timeOptions.removeAll { $0 == option }
+        if selectedTime == option { selectedTime = timeOptions.first }
     }
 
     private func toggle(_ item: String, in set: inout Set<String>) {

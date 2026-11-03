@@ -173,6 +173,7 @@ enum Persistence {
             copy.id = c.id
             copy.useCount = c.useCount
             copy.lastUsedAt = c.lastUsedAt
+            copy.isWork = c.isWork || copy.isWork
             new.insert(copy)
         }
         // ExternalItems are re-imported from Calendar / the server; no need to copy.
@@ -190,11 +191,20 @@ enum Persistence {
             }
         }
         UserDefaults.standard.set(true, forKey: "seededFolders")
+        // Once only: categories deleted in "Tuỳ chỉnh lựa chọn" must not come back on next launch.
         let chipCount = (try? context.fetchCount(FetchDescriptor<Chip>())) ?? 0
-        if chipCount == 0 {
+        if chipCount == 0 && !UserDefaults.standard.bool(forKey: "seededChips") {
             for name in ChipCatalog.defaultCategories {
                 context.insert(Chip(group: .category, label: name, isBuiltIn: true))
             }
+        }
+        UserDefaults.standard.set(true, forKey: "seededChips")
+        // Chips saved before `isWork` existed: flag "Công việc" once.
+        if !UserDefaults.standard.bool(forKey: "markedWorkChip") {
+            let name = ChipCatalog.workCategory
+            let work = FetchDescriptor<Chip>(predicate: #Predicate { $0.groupRaw == "category" && $0.label == name })
+            for chip in (try? context.fetch(work)) ?? [] { chip.isWork = true }
+            UserDefaults.standard.set(true, forKey: "markedWorkChip")
         }
         try? context.save()
     }
@@ -218,8 +228,14 @@ enum Persistence {
 
 enum ChipCatalog {
     static let defaultCategories = ["Công việc", "Học ngôn ngữ", "Sở thích", "Sức khoẻ", "Đọc sách"]
-    static let durations = [15, 25, 45, 60]
-    /// Categories that count as "phát triển bản thân" for afternoon suggestions.
+    /// Defaults for "Tuỳ chỉnh lựa chọn" (Cài đặt → Check-in); the user's lists live in `AppSettings`.
+    static let defaultDurations = [15, 25, 45, 60]
+    /// 14:00, 15:30, 17:00 in minutes after midnight. "Tối nay" (20:00) is always offered.
+    static let defaultTimeSlots = [14 * 60, 15 * 60 + 30, 17 * 60]
+    /// Duration picked when the sheet opens, if it is still in the list.
+    static let preferredDuration = 25
+    /// Default name of the work category (`Chip.isWork`); the user may rename it, so read the
+    /// current name with `ChipStore.workCategoryName`. The server still files synced work under this name.
     static let workCategory = "Công việc"
     /// Max chips per row before the rest move behind "Thêm".
     static let maxPerRow = 6

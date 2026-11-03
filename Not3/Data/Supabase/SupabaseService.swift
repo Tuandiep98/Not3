@@ -474,7 +474,7 @@ final class SupabaseService {
         item.decision = decision.rawValue
         switch decision {
         case .task:
-            let task = TaskItem(title: item.title, category: ChipCatalog.workCategory, plannedAt: nil,
+            let task = TaskItem(title: item.title, category: ChipStore.workCategoryName(in: context), plannedAt: nil,
                                 durationMinutes: nil, source: .integration)
             context.insert(task)
             await attach(task, to: item, context: context)
@@ -484,7 +484,7 @@ final class SupabaseService {
             let note = Note(folder: folder)
             note.title = item.title
             note.body = item.url ?? ""
-            note.categories = [ChipCatalog.workCategory]
+            note.categories = [ChipStore.workCategoryName(in: context)]
             context.insert(note)
         case .ignored:
             break

@@ -18,6 +18,55 @@ final class CheckInPlannerTests: XCTestCase {
         XCTAssertEqual(labels, ["14:00", "15:30", "17:00", "Tối nay"])
     }
 
+    func testTimeOptionsUseCustomSlots() {
+        let labels = CheckInPlanner.timeOptions(now: date(12, 0), slots: [16 * 60 + 45, 13 * 60]).map(\.label)
+        XCTAssertEqual(labels, ["13:00", "16:45", "Tối nay"])
+    }
+
+    func testIntListSortsAndDropsDuplicates() {
+        XCTAssertEqual(IntList.decode("45,15,x,15,60"), [15, 45, 60])
+        XCTAssertEqual(IntList.encode([60, 25, 25]), "25,60")
+        XCTAssertEqual(IntList.decode(""), [])
+    }
+
+    func testChipStoreListLimits() {
+        XCTAssertEqual(ChipStore.adding(30, to: "15,25"), "15,25,30")
+        XCTAssertNil(ChipStore.adding(25, to: "15,25"), "duplicate")
+        XCTAssertNil(ChipStore.adding(90, to: "5,10,15,20,25,30"), "row full")
+        XCTAssertEqual(ChipStore.removing(25, from: "15,25,45"), "15,45")
+        XCTAssertEqual(ChipStore.slotLabel(15 * 60 + 5), "15:05")
+    }
+
+    func testCategoryNameValidation() {
+        let work = Chip(group: .category, label: "Công việc", isBuiltIn: true)
+        XCTAssertFalse(ChipStore.isValidCategoryName("  ", renaming: nil, among: [work]))
+        XCTAssertFalse(ChipStore.isValidCategoryName("công việc", renaming: nil, among: [work]))
+        XCTAssertTrue(ChipStore.isValidCategoryName("Công việc", renaming: work, among: [work]))
+        XCTAssertTrue(ChipStore.isValidCategoryName("Thiền", renaming: nil, among: [work]))
+    }
+
+    func testRenamedWorkCategoryStillComesLast() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        let chips = ChipCatalog.defaultCategories.map { Chip(group: .category, label: $0, isBuiltIn: true) }
+        chips.forEach(context.insert)
+        let work = try XCTUnwrap(chips.first { $0.isWork })
+        ChipStore.saveCategory("Công ty", renaming: work, in: context)
+
+        XCTAssertEqual(ChipStore.workCategoryName(in: context), "Công ty")
+        let result = CheckInPlanner.suggestions(categories: chips, recentTasks: [], now: date(12))
+        XCTAssertFalse(result.contains { $0.category == "Công ty" }, "self-development first")
+
+        ChipStore.saveCategory("Công việc", renaming: nil, in: context)
+        let flagged = try context.fetch(FetchDescriptor<Chip>()).filter(\.isWork).map(\.label)
+        XCTAssertEqual(flagged, ["Công ty"], "a new \"Công việc\" does not take the flag")
+    }
+
+    func testCategoryAddedInSettingsShowsBeforeFirstUse() {
+        let chip = Chip(group: .category, label: "Thiền", isBuiltIn: false)
+        XCTAssertEqual(CheckInPlanner.rankedCategories([chip]).map(\.label), ["Thiền"])
+    }
+
     func testIfThenSentence() {
         let time = TimeOption(id: "14:00", label: "14:00", date: date(14))
         XCTAssertEqual(

@@ -10,6 +10,10 @@ enum SettingsKey {
     static let aiReadsIntegrations = "aiReadsIntegrations"
     static let addToCalendar = "addToCalendar"
     static let eveningCheckIn = "eveningCheckIn"
+    /// Check-in duration chips in minutes, as an `IntList` ("15,25,45,60").
+    static let checkInDurations = "checkInDurations"
+    /// Afternoon time chips in minutes after midnight, as an `IntList` ("840,930,1020").
+    static let checkInTimeSlots = "checkInTimeSlots"
     static let appLock = "appLock"
     static let appLockDelay = "appLockDelaySeconds"
     // "Hiển thị khi khoá". Unset = follow the Face ID switch (see AppSettings).
@@ -17,6 +21,17 @@ enum SettingsKey {
     static let spotlightPrivacy = "privacySpotlight"
     static let siriRequiresUnlock = "privacySiriRequiresUnlock"
     static let obscureSwitcher = "privacyObscureSwitcher"
+}
+
+/// Sorted, de-duplicated ints stored as "15,25,45" so @AppStorage can bind a list.
+enum IntList {
+    static func decode(_ raw: String) -> [Int] {
+        Array(Set(raw.split(separator: ",").compactMap { Int($0) })).sorted()
+    }
+
+    static func encode(_ values: [Int]) -> String {
+        Array(Set(values)).sorted().map(String.init).joined(separator: ",")
+    }
 }
 
 /// What widgets / complications show on a locked device.
@@ -55,6 +70,8 @@ enum AppSettings {
             SettingsKey.aiReadsIntegrations: true,
             SettingsKey.addToCalendar: true,
             SettingsKey.eveningCheckIn: true,
+            SettingsKey.checkInDurations: IntList.encode(ChipCatalog.defaultDurations),
+            SettingsKey.checkInTimeSlots: IntList.encode(ChipCatalog.defaultTimeSlots),
             SettingsKey.appLock: false,
             SettingsKey.appLockDelay: 60,
         ])
@@ -66,6 +83,16 @@ enum AppSettings {
     static var syncNoteContent: Bool { UserDefaults.standard.bool(forKey: SettingsKey.syncNoteContent) }
     static var appLockEnabled: Bool { UserDefaults.standard.bool(forKey: SettingsKey.appLock) }
     static var appLockDelay: Int { UserDefaults.standard.integer(forKey: SettingsKey.appLockDelay) }
+
+    static var checkInDurations: [Int] {
+        UserDefaults.standard.string(forKey: SettingsKey.checkInDurations).map(IntList.decode)
+            ?? ChipCatalog.defaultDurations
+    }
+
+    static var checkInTimeSlots: [Int] {
+        UserDefaults.standard.string(forKey: SettingsKey.checkInTimeSlots).map(IntList.decode)
+            ?? ChipCatalog.defaultTimeSlots
+    }
 
     // "Hiển thị khi khoá": a value the user picked wins; otherwise the default follows Face ID
     // (stricter when the app lock is on), so toggling Face ID never overwrites a choice.

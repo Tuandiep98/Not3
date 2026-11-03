@@ -325,11 +325,15 @@ final class Chip {
     var useCount: Int = 0
     var lastUsedAt: Date?
     var isBuiltIn: Bool = false
+    /// The category for job work (afternoon suggestions put self-development first). Kept on the
+    /// chip, not the name, so "Công việc" can be renamed.
+    var isWork: Bool = false
 
     init(group: ChipGroup, label: String, isBuiltIn: Bool) {
         self.groupRaw = group.rawValue
         self.label = label
         self.isBuiltIn = isBuiltIn
+        self.isWork = group == .category && label == ChipCatalog.workCategory
     }
 
     var group: ChipGroup { ChipGroup(rawValue: groupRaw) ?? .category }

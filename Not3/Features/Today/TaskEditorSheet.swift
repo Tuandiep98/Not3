@@ -9,6 +9,7 @@ struct TaskEditorSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SupabaseService.self) private var supabase
     @Query private var chips: [Chip]
+    @AppStorage(SettingsKey.checkInDurations) private var durationsRaw = IntList.encode(ChipCatalog.defaultDurations)
 
     @State private var title = ""
     @State private var category: String?
@@ -18,6 +19,7 @@ struct TaskEditorSheet: View {
     @State private var repeatChoice: RepeatChoice = .never
     @State private var weeklyDays: Set<Int> = [Recurrence.weekday(of: Date())]
     @State private var didLoad = false
+    @State private var editingCategory: CategoryEdit?
     @FocusState private var titleFocused: Bool
 
     private enum When: Hashable { case today, at, someday }
@@ -41,6 +43,13 @@ struct TaskEditorSheet: View {
         return TaskActions.task(id: id, in: context)
     }
 
+    /// The user's durations, plus the task's own one when it is not in the list.
+    private var durationOptions: [Int] {
+        let list = IntList.decode(durationsRaw)
+        guard let duration, !list.contains(duration) else { return list }
+        return (list + [duration]).sorted()
+    }
+
     private var series: TaskSeries? {
         RecurrenceService.series(id: task?.seriesId, in: context)
     }
@@ -53,11 +62,21 @@ struct TaskEditorSheet: View {
                         .font(.title3)
                         .focused($titleFocused)
                     ChipGroupContainer {
-                        ForEach(CheckInPlanner.rankedCategories(chips)) { chip in
+                        let ranked = CheckInPlanner.rankedCategories(chips)
+                        ForEach(ranked) { chip in
                             ChipButton(title: chip.label, isOn: category == chip.label) {
                                 category = category == chip.label ? nil : chip.label
                             }
+                            .categoryChipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
+                                ChipStore.deleteCategory(chip, in: context)
+                            }
                         }
+                        ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new }
+                            .accessibilityLabel("Thêm danh mục")
+                    }
+                    .categoryEditor($editingCategory) { old, new in
+                        // New one is picked; a rename of the picked one follows it.
+                        if old == nil || category == old { category = new }
                     }
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 }
@@ -74,7 +93,7 @@ struct TaskEditorSheet: View {
                         DatePicker("Lúc", selection: $date, in: Date()..., displayedComponents: [.date, .hourAndMinute])
                     }
                     ChipGroupContainer {
-                        ForEach(ChipCatalog.durations, id: \.self) { minutes in
+                        ForEach(durationOptions, id: \.self) { minutes in
                             ChipButton(title: "\(minutes)p", isOn: duration == minutes) {
                                 duration = duration == minutes ? nil : minutes
                             }
