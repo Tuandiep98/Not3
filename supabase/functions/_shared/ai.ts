@@ -161,7 +161,8 @@ export async function tagNote(input: {
 export type WeekStats = {
   week_start: string;
   meaningful_days: number;
-  days: { day: string; weekday: string; done: string[]; mood: string | null }[];
+  // mood: level (good / ok / empty); mood_label: the user's own name for the feeling.
+  days: { day: string; weekday: string; done: string[]; mood: string | null; mood_label?: string | null }[];
   by_category: Record<string, number>;
   empty_days: string[];
 };

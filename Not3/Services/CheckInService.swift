@@ -19,17 +19,22 @@ enum CheckInService {
         return checkIn
     }
 
-    /// Quick answer from the notification / widget buttons.
+    /// Quick answer from the notification / widget / Watch buttons: they only know the level,
+    /// so the first feeling of that level is recorded.
     static func recordMood(_ mood: Mood, in context: ModelContext) {
         let checkIn = checkIn(in: context)
+        let label = ChipStore.moodLabel(for: mood, in: context)
+        checkIn.moodLabel = label
         checkIn.mood = mood
-        bumpChip(group: .mood, label: mood.label, in: context)
+        bumpChip(group: .mood, label: label, in: context)
         try? context.save()
     }
 
     struct Plan {
         var morningItems: [String]
         var mood: Mood?
+        /// The picked feeling's name; nil = the level's default name.
+        var moodLabel: String? = nil
         var task: AfternoonSuggestion?
         var time: TimeOption?
         var durationMinutes: Int?
@@ -39,8 +44,9 @@ enum CheckInService {
     static func save(_ plan: Plan, in context: ModelContext) -> TaskItem? {
         let checkIn = checkIn(in: context)
         checkIn.morningItems = plan.morningItems
+        checkIn.moodLabel = plan.mood == nil ? nil : plan.moodLabel
         checkIn.mood = plan.mood
-        if let mood = plan.mood { bumpChip(group: .mood, label: mood.label, in: context) }
+        if let text = checkIn.moodText { bumpChip(group: .mood, label: text, in: context) }
 
         var created: TaskItem?
         if let suggestion = plan.task {

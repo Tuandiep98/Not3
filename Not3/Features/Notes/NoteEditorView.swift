@@ -29,7 +29,7 @@ private struct NoteEditorContent: View {
     @State private var isShowingVoice = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
     @State private var isShowingCamera = false
-    @State private var editingCategory: CategoryEdit?
+    @State private var editingCategory: ChipEdit?
 
     private enum Field: Hashable {
         case title, body
@@ -179,14 +179,14 @@ private struct NoteEditorContent: View {
                 }
                 let ranked = CheckInPlanner.rankedCategories(chips)
                 ForEach(ranked) { chip in
-                    ChipButton(title: chip.label, isOn: note.categories.contains(chip.label)) {
+                    ChipButton(chip: chip, isOn: note.categories.contains(chip.label)) {
                         toggleCategory(chip.label)
                     }
-                    .categoryChipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
-                        ChipStore.deleteCategory(chip, in: context)
+                    .chipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
+                        ChipStore.delete(chip, in: context)
                     }
                 }
-                ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new }
+                ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new(.category) }
                     .accessibilityLabel("Thêm danh mục")
                 ForEach(durationOptions, id: \.self) { minutes in
                     ChipButton(title: "\(minutes)p", isOn: note.durationMinutes == minutes) {
@@ -197,13 +197,13 @@ private struct NoteEditorContent: View {
             }
             .padding(.vertical, 4)
         }
-        .categoryEditor($editingCategory) { old, new in
+        .chipEditor($editingCategory) { old, new in
             // New one goes on this note; a rename of one it has follows it.
             if let old, let index = note.categories.firstIndex(of: old) {
-                note.categories[index] = new
+                note.categories[index] = new.label
                 note.needsSync = true
             } else if old == nil {
-                toggleCategory(new)
+                toggleCategory(new.label)
             }
         }
     }

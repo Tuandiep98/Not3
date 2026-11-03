@@ -103,7 +103,7 @@ Deno.serve(async (req) => {
           return { count, items: data };
         }
         if (name === "query_checkins") {
-          const { data, error } = await userDb.from("checkins").select("day, mood, morning_items")
+          const { data, error } = await userDb.from("checkins").select("day, mood, mood_label, morning_items")
             .gte("day", args.from).lte("day", args.to).order("day");
           if (error) throw error;
           return { count: data?.length ?? 0, items: data };

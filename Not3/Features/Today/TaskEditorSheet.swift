@@ -19,7 +19,7 @@ struct TaskEditorSheet: View {
     @State private var repeatChoice: RepeatChoice = .never
     @State private var weeklyDays: Set<Int> = [Recurrence.weekday(of: Date())]
     @State private var didLoad = false
-    @State private var editingCategory: CategoryEdit?
+    @State private var editingCategory: ChipEdit?
     @FocusState private var titleFocused: Bool
 
     private enum When: Hashable { case today, at, someday }
@@ -64,19 +64,19 @@ struct TaskEditorSheet: View {
                     ChipGroupContainer {
                         let ranked = CheckInPlanner.rankedCategories(chips)
                         ForEach(ranked) { chip in
-                            ChipButton(title: chip.label, isOn: category == chip.label) {
+                            ChipButton(chip: chip, isOn: category == chip.label) {
                                 category = category == chip.label ? nil : chip.label
                             }
-                            .categoryChipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
-                                ChipStore.deleteCategory(chip, in: context)
+                            .chipMenu(chip, edit: $editingCategory, canDelete: ranked.count > 1) {
+                                ChipStore.delete(chip, in: context)
                             }
                         }
-                        ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new }
+                        ChipButton(title: "Thêm", systemImage: "plus") { editingCategory = .new(.category) }
                             .accessibilityLabel("Thêm danh mục")
                     }
-                    .categoryEditor($editingCategory) { old, new in
+                    .chipEditor($editingCategory) { old, new in
                         // New one is picked; a rename of the picked one follows it.
-                        if old == nil || category == old { category = new }
+                        if old == nil || category == old { category = new.label }
                     }
                     .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
                 }

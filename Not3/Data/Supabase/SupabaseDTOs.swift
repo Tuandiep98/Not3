@@ -115,12 +115,26 @@ struct CheckInRecord: Encodable, Sendable {
     let userId: UUID
     let day: String
     let morningItems: [String]
+    /// Level (good / ok / empty); `moodLabel` is the user's name for the feeling.
     let mood: String?
+    let moodLabel: String?
     let afternoonPlanIds: [UUID]
 
     enum CodingKeys: String, CodingKey {
         case id, userId = "user_id", day
-        case morningItems = "morning_items", mood, afternoonPlanIds = "afternoon_plan_ids"
+        case morningItems = "morning_items", mood, moodLabel = "mood_label", afternoonPlanIds = "afternoon_plan_ids"
+    }
+
+    /// Writes `mood_label` as null too: rows in one upsert must have the same keys.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(userId, forKey: .userId)
+        try c.encode(day, forKey: .day)
+        try c.encode(morningItems, forKey: .morningItems)
+        try c.encode(mood, forKey: .mood)
+        try c.encode(moodLabel, forKey: .moodLabel)
+        try c.encode(afternoonPlanIds, forKey: .afternoonPlanIds)
     }
 
     init(_ checkIn: CheckIn, userId: UUID) {
@@ -129,6 +143,7 @@ struct CheckInRecord: Encodable, Sendable {
         day = DayClock.isoDay(checkIn.day)
         morningItems = checkIn.morningItems
         mood = checkIn.moodRaw
+        moodLabel = checkIn.moodLabel
         afternoonPlanIds = checkIn.afternoonTaskIds
     }
 }

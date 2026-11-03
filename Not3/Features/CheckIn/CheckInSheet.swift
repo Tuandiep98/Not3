@@ -20,6 +20,9 @@ struct CheckInSheet: View {
     /// Morning chips that came from the server, label → suggestion id.
     @State private var morningServerIds: [String: UUID] = [:]
     @State private var mood: Mood?
+    /// Name of the picked feeling (several feelings can share a level).
+    @State private var moodLabel: String?
+    @State private var editingChip: ChipEdit?
     @State private var suggestions: [AfternoonSuggestion] = []
     @State private var selectedTask: AfternoonSuggestion?
     @State private var timeOptions: [TimeOption] = []
@@ -113,12 +116,24 @@ struct CheckInSheet: View {
     private var moodSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SheetSectionHeader(title: "Cảm nhận buổi sáng")
+            let options = ChipStore.moodOptions(chips)
             ChipGroupContainer {
-                ForEach(Mood.allCases) { option in
-                    ChipButton(title: option.label, isOn: mood == option) {
-                        mood = mood == option ? nil : option
+                ForEach(options) { chip in
+                    let isOn = moodLabel == chip.label
+                    ChipButton(title: chip.label, isOn: isOn, systemImage: chip.symbol ?? chip.level?.symbol) {
+                        pickMood(isOn ? nil : chip)
+                    }
+                    .chipMenu(chip, edit: $editingChip, canDelete: options.count > 1) {
+                        if isOn { pickMood(nil) }
+                        ChipStore.delete(chip, in: context)
                     }
                 }
+                ChipButton(title: "Thêm", systemImage: "plus") { editingChip = .new(.mood) }
+                    .accessibilityLabel("Thêm cảm nhận")
+            }
+            .chipEditor($editingChip) { old, new in
+                // New one is picked; a rename of the picked one follows it.
+                if old == nil || moodLabel == old { pickMood(new) }
             }
         }
     }
@@ -146,7 +161,9 @@ struct CheckInSheet: View {
             }
             ChipGroupContainer {
                 ForEach(suggestions.prefix(ChipCatalog.maxPerRow)) { suggestion in
-                    ChipButton(title: suggestion.title, isOn: selectedTask == suggestion) {
+                    let style = CategoryAppearance.style(for: suggestion.category)
+                    ChipButton(title: suggestion.title, isOn: selectedTask == suggestion,
+                               systemImage: style?.symbol, tint: style?.color?.color) {
                         select(suggestion)
                     }
                 }
@@ -238,6 +255,7 @@ struct CheckInSheet: View {
             items += existing.morningItems.filter { !items.contains($0) }
             confirmedMorning = Set(existing.morningItems)
             mood = existing.mood
+            moodLabel = existing.mood == nil ? nil : existing.moodText
         } else {
             confirmedMorning = Set(items)
         }
@@ -400,6 +418,11 @@ struct CheckInSheet: View {
         if selectedTime == option { selectedTime = timeOptions.first }
     }
 
+    private func pickMood(_ chip: Chip?) {
+        mood = chip?.level
+        moodLabel = chip?.level == nil ? nil : chip?.label
+    }
+
     private func toggle(_ item: String, in set: inout Set<String>) {
         if set.contains(item) { set.remove(item) } else { set.insert(item) }
     }
@@ -408,6 +431,7 @@ struct CheckInSheet: View {
         let plan = CheckInService.Plan(
             morningItems: morningOptions.filter(confirmedMorning.contains),
             mood: mood,
+            moodLabel: moodLabel,
             task: selectedTask,
             time: selectedTask == nil ? nil : selectedTime,
             durationMinutes: selectedTask == nil ? nil : duration

@@ -22,11 +22,14 @@ enum TaskSource: String, Codable, Sendable {
     case manual, ai, integration
 }
 
+/// How the morning went, as a level. The user names their own feelings (`Chip` in group `.mood`,
+/// each with one of these levels); the server and weekly summary count the level.
 enum Mood: String, Codable, CaseIterable, Identifiable, Sendable {
     case good, ok, empty
 
     var id: String { rawValue }
 
+    /// Default name of the built-in feeling for this level.
     var label: String {
         switch self {
         case .good: "Hiệu quả"
@@ -34,6 +37,25 @@ enum Mood: String, Codable, CaseIterable, Identifiable, Sendable {
         case .empty: "Trống"
         }
     }
+
+    /// Level name in the feeling editor.
+    var levelLabel: String {
+        switch self {
+        case .good: "Tốt"
+        case .ok: "Vừa"
+        case .empty: "Chưa tốt"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .good: "sun.max.fill"
+        case .ok: "cloud.sun.fill"
+        case .empty: "moon.zzz.fill"
+        }
+    }
+
+    var order: Int { Self.allCases.firstIndex(of: self) ?? 0 }
 }
 
 enum ChipGroup: String, Codable, Sendable {
@@ -303,6 +325,8 @@ final class CheckIn {
     var day: Date = Date()
     var morningItems: [String] = []
     var moodRaw: String?
+    /// The feeling the user picked ("Hiệu quả", "Tập trung"…); `mood` is its level.
+    var moodLabel: String?
     var afternoonTaskIds: [UUID] = []
     var createdAt: Date = Date()
     var needsSync: Bool = true
@@ -315,6 +339,9 @@ final class CheckIn {
         get { moodRaw.flatMap(Mood.init(rawValue:)) }
         set { moodRaw = newValue?.rawValue; needsSync = true }
     }
+
+    /// What to show: the picked feeling, else the level's default name.
+    var moodText: String? { moodLabel ?? mood?.label }
 }
 
 @Model
@@ -328,6 +355,12 @@ final class Chip {
     /// The category for job work (afternoon suggestions put self-development first). Kept on the
     /// chip, not the name, so "Công việc" can be renamed.
     var isWork: Bool = false
+    /// Feelings (group `.mood`): the level counted by the server. Nil = a usage-only chip.
+    var levelRaw: String?
+    /// SF Symbol shown on the chip.
+    var symbol: String?
+    /// `ChipColor` raw value (categories).
+    var colorName: String?
 
     init(group: ChipGroup, label: String, isBuiltIn: Bool) {
         self.groupRaw = group.rawValue
@@ -337,6 +370,11 @@ final class Chip {
     }
 
     var group: ChipGroup { ChipGroup(rawValue: groupRaw) ?? .category }
+
+    var level: Mood? {
+        get { levelRaw.flatMap(Mood.init(rawValue:)) }
+        set { levelRaw = newValue?.rawValue }
+    }
 }
 
 /// Items pulled from GitHub / Jira / Calendar (filled by sync in phase 3).

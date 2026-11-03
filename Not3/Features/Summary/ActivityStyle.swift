@@ -28,7 +28,9 @@ extension ActivityKind {
         case .code: .blue
         case .meeting: .orange
         case .jira: .teal
-        case .category(let name): ActivityCategorySlots.slot(of: name) == 1 ? .pink : .purple
+        // A colour the user picked for the category wins over the slot colour.
+        case .category(let name): CategoryAppearance.style(for: name)?.color?.color
+            ?? (ActivityCategorySlots.slot(of: name) == 1 ? .pink : .purple)
         case .other: .gray
         }
     }
@@ -38,7 +40,7 @@ extension ActivityKind {
         case .code: "chevron.left.forwardslash.chevron.right"
         case .meeting: "person.2.fill"
         case .jira: "checklist"
-        case .category: "tag.fill"
+        case .category(let name): CategoryAppearance.style(for: name)?.symbol ?? "tag.fill"
         case .other: "ellipsis"
         }
     }

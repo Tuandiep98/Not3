@@ -163,6 +163,7 @@ enum Persistence {
             copy.id = c.id
             copy.morningItems = c.morningItems
             copy.moodRaw = c.moodRaw
+            copy.moodLabel = c.moodLabel
             copy.afternoonTaskIds = c.afternoonTaskIds
             copy.createdAt = c.createdAt
             copy.needsSync = c.needsSync
@@ -174,6 +175,9 @@ enum Persistence {
             copy.useCount = c.useCount
             copy.lastUsedAt = c.lastUsedAt
             copy.isWork = c.isWork || copy.isWork
+            copy.levelRaw = c.levelRaw
+            copy.symbol = c.symbol
+            copy.colorName = c.colorName
             new.insert(copy)
         }
         // ExternalItems are re-imported from Calendar / the server; no need to copy.
@@ -206,7 +210,12 @@ enum Persistence {
             for chip in (try? context.fetch(work)) ?? [] { chip.isWork = true }
             UserDefaults.standard.set(true, forKey: "markedWorkChip")
         }
+        if !UserDefaults.standard.bool(forKey: "seededMoods") {
+            ChipStore.seedMoods(in: context)
+            UserDefaults.standard.set(true, forKey: "seededMoods")
+        }
         try? context.save()
+        ChipStore.refreshAppearance(in: context)
     }
 
     /// iCloud can deliver a second copy of a default folder created on another device.

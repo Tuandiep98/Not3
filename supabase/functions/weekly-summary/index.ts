@@ -57,7 +57,7 @@ async function weekStats(db: any, u: DueUser): Promise<WeekStats> {
       u.user_id,
     ).eq("status", "done")
       .gte("completed_at", from).lt("completed_at", to),
-    db.from("checkins").select("day, mood").eq("user_id", u.user_id).gte(
+    db.from("checkins").select("day, mood, mood_label").eq("user_id", u.user_id).gte(
       "day",
       days[0],
     ).lte("day", days[6]),
@@ -80,16 +80,17 @@ async function weekStats(db: any, u: DueUser): Promise<WeekStats> {
     const category = t.chips?.[0] ?? "Khác";
     byCategory[category] = (byCategory[category] ?? 0) + 1;
   }
-  const moods = new Map<string, string | null>(
+  const moods = new Map<string, { mood: string | null; label: string | null }>(
     (checkins ?? []).map((
-      c: { day: string; mood: string | null },
-    ) => [c.day, c.mood]),
+      c: { day: string; mood: string | null; mood_label: string | null },
+    ) => [c.day, { mood: c.mood, label: c.mood_label }]),
   );
   const dayStats = days.map((day, i) => ({
     day,
     weekday: WEEKDAYS[i],
     done: byDay.get(day) ?? [],
-    mood: moods.get(day) ?? null,
+    mood: moods.get(day)?.mood ?? null,
+    mood_label: moods.get(day)?.label ?? null,
   }));
   return {
     week_start: u.week_start,

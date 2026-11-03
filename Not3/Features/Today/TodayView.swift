@@ -276,7 +276,7 @@ struct TodayView: View {
                 .font(.title2)
                 .foregroundStyle(.green)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Đã check-in · \(checkIn.mood?.label ?? "")")
+                Text("Đã check-in · \(checkIn.moodText ?? "")")
                     .font(.subheadline.weight(.semibold))
                 if let plan = todayTasks.first(where: { checkIn.afternoonTaskIds.contains($0.id) }),
                    let sentence = plan.ifThenSentence {
@@ -402,8 +402,8 @@ struct TaskRow: View {
                 Text(titleLine)
                     .strikethrough(task.status == .done)
                     .foregroundStyle(task.status == .done ? .secondary : .primary)
-                if let detail = detailLine {
-                    Text(detail).font(.footnote).foregroundStyle(.secondary)
+                if let detail = detailText {
+                    detail.font(.footnote).foregroundStyle(.secondary)
                 }
                 if isReopened {
                     // GitHub / Jira sent it back: say why, so the user knows to continue.
@@ -523,12 +523,23 @@ struct TaskRow: View {
         return "\(when) · \(task.title)"
     }
 
-    private var detailLine: String? {
+    /// "Từ 31/10 · 25 phút · ● Sức khoẻ" — the category with its own symbol / colour.
+    private var detailText: Text? {
         // Undated work carried over from an earlier day shows where it started.
         let carried = task.plannedAt == nil && TodayList.isCarriedOver(task) ? "Từ \(DayClock.dayMonth(task.createdAt))" : nil
         let doing = task.status == .doing && !isReopened ? TaskStatus.doing.label : nil
-        let parts = [carried, doing, task.durationMinutes.map { "\($0) phút" }, task.category].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+        let parts = [carried, doing, task.durationMinutes.map { "\($0) phút" }].compactMap { $0 }
+        guard !parts.isEmpty || task.category != nil else { return nil }
+        var text = Text(parts.joined(separator: " · "))
+        if let category = task.category {
+            if !parts.isEmpty { text = text + Text(" · ") }
+            let style = CategoryAppearance.style(for: category)
+            if let symbol = style?.symbol ?? (style?.color != nil ? "circle.fill" : nil) {
+                text = text + Text(Image(systemName: symbol)).foregroundStyle(style?.color?.color ?? .secondary) + Text(" ")
+            }
+            text = text + Text(category)
+        }
+        return text
     }
 }
 

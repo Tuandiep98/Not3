@@ -2,15 +2,16 @@ import SwiftData
 import SwiftUI
 
 /// "Tuỳ chỉnh lựa chọn" (Cài đặt → Check-in): the chips offered in the check-in sheet —
-/// categories, afternoon times and durations. Add, rename, swipe to delete.
+/// categories, feelings, afternoon times and durations. Add, edit, swipe to delete.
 struct CheckInOptionsView: View {
     @Environment(\.modelContext) private var context
     @Query(filter: #Predicate<Chip> { $0.groupRaw == "category" }, sort: \Chip.label)
     private var categories: [Chip]
+    @Query(filter: #Predicate<Chip> { $0.groupRaw == "mood" }) private var moodChips: [Chip]
     @AppStorage(SettingsKey.checkInDurations) private var durationsRaw = IntList.encode(ChipCatalog.defaultDurations)
     @AppStorage(SettingsKey.checkInTimeSlots) private var timeSlotsRaw = IntList.encode(ChipCatalog.defaultTimeSlots)
 
-    @State private var editing: CategoryEdit?
+    @State private var editing: ChipEdit?
     @State private var draftDuration = 30
     @State private var draftTime = DayClock.at(hour: 16, minute: 0)
     @State private var isConfirmingReset = false
@@ -21,6 +22,7 @@ struct CheckInOptionsView: View {
     var body: some View {
         Form {
             categorySection
+            moodSection
             timeSection
             durationSection
             Section {
@@ -29,11 +31,11 @@ struct CheckInOptionsView: View {
         }
         .navigationTitle("Tuỳ chỉnh lựa chọn")
         .navigationBarTitleDisplayMode(.inline)
-        .categoryEditor($editing)
+        .chipEditor($editing)
         .confirmationDialog("Khôi phục mặc định?", isPresented: $isConfirmingReset, titleVisibility: .visible) {
             Button("Khôi phục", role: .destructive, action: resetDefaults)
         } message: {
-            Text("Mốc giờ và thời lượng về như ban đầu, danh mục mặc định đã xoá được thêm lại. Danh mục bạn tự thêm vẫn giữ.")
+            Text("Mốc giờ và thời lượng về như ban đầu; danh mục và cảm nhận mặc định đã xoá được thêm lại. Những mục bạn tự thêm vẫn giữ.")
         }
     }
 
@@ -43,21 +45,27 @@ struct CheckInOptionsView: View {
         Section {
             ForEach(categories) { chip in
                 Button {
-                    editing = .rename(chip)
+                    editing = .edit(chip)
                 } label: {
                     LabeledContent {
-                        if chip.useCount > 0 {
-                            Text("\(chip.useCount) lần").monospacedDigit()
+                        HStack(spacing: 6) {
+                            if chip.isWork {
+                                Image(systemName: "briefcase.fill").accessibilityHidden(true)
+                            }
+                            if chip.useCount > 0 {
+                                Text("\(chip.useCount) lần").monospacedDigit()
+                            }
                         }
                     } label: {
-                        if chip.isWork {
-                            Label(chip.label, systemImage: "briefcase.fill").foregroundStyle(.primary)
-                        } else {
+                        Label {
                             Text(chip.label).foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: chip.symbol ?? "tag.fill")
+                                .foregroundStyle(chip.chipColor?.color ?? .secondary)
                         }
                     }
                 }
-                .accessibilityHint("Chạm để đổi tên")
+                .accessibilityHint("Chạm để sửa tên, màu và biểu tượng")
                 .accessibilityValue(chip.isWork ? "Danh mục công việc" : "")
                 .swipeActions(edge: .leading) {
                     if !chip.isWork {
@@ -67,14 +75,46 @@ struct CheckInOptionsView: View {
                 }
             }
             .onDelete { offsets in
-                offsets.map { categories[$0] }.forEach { ChipStore.deleteCategory($0, in: context) }
+                offsets.map { categories[$0] }.forEach { ChipStore.delete($0, in: context) }
             }
             .deleteDisabled(categories.count <= 1)
-            Button("Thêm danh mục", systemImage: "plus") { editing = .new }
+            Button("Thêm danh mục", systemImage: "plus") { editing = .new(.category) }
         } header: {
             Text("Danh mục")
         } footer: {
-            Text("Chạm để đổi tên, vuốt sang trái để xoá, vuốt sang phải để đặt làm danh mục công việc (\(Image(systemName: "briefcase.fill"))). Gợi ý buổi chiều ưu tiên việc phát triển bản thân trước công việc. Việc đã gắn danh mục bị xoá vẫn giữ nhãn đó.")
+            Text("Chạm để sửa tên, màu và biểu tượng; vuốt sang trái để xoá, vuốt sang phải để đặt làm danh mục công việc (\(Image(systemName: "briefcase.fill"))). Gợi ý buổi chiều ưu tiên việc phát triển bản thân trước công việc. Việc đã gắn danh mục bị xoá vẫn giữ nhãn đó.")
+        }
+    }
+
+    private var moodSection: some View {
+        let moods = ChipStore.moodOptions(moodChips)
+        return Section {
+            ForEach(moods) { chip in
+                Button {
+                    editing = .edit(chip)
+                } label: {
+                    LabeledContent {
+                        Text(chip.level?.levelLabel ?? "")
+                    } label: {
+                        Label {
+                            Text(chip.label).foregroundStyle(.primary)
+                        } icon: {
+                            Image(systemName: chip.symbol ?? chip.level?.symbol ?? "face.smiling")
+                                .foregroundStyle(Theme.accentInk)
+                        }
+                    }
+                }
+                .accessibilityHint("Chạm để sửa")
+            }
+            .onDelete { offsets in
+                offsets.map { moods[$0] }.forEach { ChipStore.delete($0, in: context) }
+            }
+            .deleteDisabled(moods.count <= 1)
+            Button("Thêm cảm nhận", systemImage: "plus") { editing = .new(.mood) }
+        } header: {
+            Text("Cảm nhận buổi sáng")
+        } footer: {
+            Text("Mỗi cảm nhận có một mức độ (Tốt, Vừa, Chưa tốt) để Tổng kết tuần so sánh được. Nút trả lời nhanh trên thông báo, widget và Watch dùng cảm nhận đầu tiên của mỗi mức.")
         }
     }
 
@@ -145,6 +185,14 @@ struct CheckInOptionsView: View {
         for name in ChipCatalog.defaultCategories where !existing.contains(name) {
             context.insert(Chip(group: .category, label: name, isBuiltIn: true))
         }
+        let moodNames = Set(moodChips.map(\.label))
+        for level in Mood.allCases where !moodNames.contains(level.label) {
+            let chip = Chip(group: .mood, label: level.label, isBuiltIn: true)
+            chip.level = level
+            chip.symbol = level.symbol
+            context.insert(chip)
+        }
         try? context.save()
+        ChipStore.refreshAppearance(in: context)
     }
 }

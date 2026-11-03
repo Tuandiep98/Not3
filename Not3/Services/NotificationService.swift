@@ -25,7 +25,7 @@ enum NotificationService {
 
     static func registerCategories() {
         let actions = Mood.allCases.map { mood in
-            UNNotificationAction(identifier: moodActionPrefix + mood.rawValue, title: mood.label, options: [])
+            UNNotificationAction(identifier: moodActionPrefix + mood.rawValue, title: ChipStore.quickMoodLabel(mood), options: [])
         }
         let category = UNNotificationCategory(
             identifier: checkInCategory,

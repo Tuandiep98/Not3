@@ -5,6 +5,8 @@ struct ChipButton: View {
     let title: String
     var isOn: Bool = false
     var systemImage: String?
+    /// Colour of `systemImage` while the chip is off (a category's colour).
+    var tint: Color?
     let action: () -> Void
 
     var body: some View {
@@ -16,6 +18,9 @@ struct ChipButton: View {
                 } else if let systemImage {
                     Image(systemName: systemImage)
                         .font(.caption.weight(.semibold))
+                        .foregroundStyle(tint ?? Color.primary)
+                } else if let tint {
+                    Circle().fill(tint).frame(width: 8, height: 8)
                 }
                 Text(title)
             }

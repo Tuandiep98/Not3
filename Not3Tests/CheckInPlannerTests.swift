@@ -39,10 +39,10 @@ final class CheckInPlannerTests: XCTestCase {
 
     func testCategoryNameValidation() {
         let work = Chip(group: .category, label: "Công việc", isBuiltIn: true)
-        XCTAssertFalse(ChipStore.isValidCategoryName("  ", renaming: nil, among: [work]))
-        XCTAssertFalse(ChipStore.isValidCategoryName("công việc", renaming: nil, among: [work]))
-        XCTAssertTrue(ChipStore.isValidCategoryName("Công việc", renaming: work, among: [work]))
-        XCTAssertTrue(ChipStore.isValidCategoryName("Thiền", renaming: nil, among: [work]))
+        XCTAssertFalse(ChipStore.isValidName("  ", editing: nil, among: [work]))
+        XCTAssertFalse(ChipStore.isValidName("công việc", editing: nil, among: [work]))
+        XCTAssertTrue(ChipStore.isValidName("Công việc", editing: work, among: [work]))
+        XCTAssertTrue(ChipStore.isValidName("Thiền", editing: nil, among: [work]))
     }
 
     func testRenamedWorkCategoryStillComesLast() throws {
@@ -51,15 +51,45 @@ final class CheckInPlannerTests: XCTestCase {
         let chips = ChipCatalog.defaultCategories.map { Chip(group: .category, label: $0, isBuiltIn: true) }
         chips.forEach(context.insert)
         let work = try XCTUnwrap(chips.first { $0.isWork })
-        ChipStore.saveCategory("Công ty", renaming: work, in: context)
+        ChipStore.save(ChipDraft(name: "Công ty"), group: .category, editing: work, in: context)
 
         XCTAssertEqual(ChipStore.workCategoryName(in: context), "Công ty")
         let result = CheckInPlanner.suggestions(categories: chips, recentTasks: [], now: date(12))
         XCTAssertFalse(result.contains { $0.category == "Công ty" }, "self-development first")
 
-        ChipStore.saveCategory("Công việc", renaming: nil, in: context)
+        ChipStore.save(ChipDraft(name: "Công việc"), group: .category, editing: nil, in: context)
         let flagged = try context.fetch(FetchDescriptor<Chip>()).filter(\.isWork).map(\.label)
         XCTAssertEqual(flagged, ["Công ty"], "a new \"Công việc\" does not take the flag")
+    }
+
+    func testCustomFeelingIsSavedWithItsLevel() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        ChipStore.seedMoods(in: context)
+        let focused = ChipStore.save(ChipDraft(name: "Tập trung", level: .good, symbol: "target"),
+                                     group: .mood, editing: nil, in: context)
+
+        let options = ChipStore.moodOptions(try context.fetch(FetchDescriptor<Chip>()))
+        XCTAssertEqual(options.first?.label, Mood.good.label, "built-in first within a level")
+        XCTAssertTrue(options.contains { $0.label == "Tập trung" && $0.level == .good })
+
+        let plan = CheckInService.Plan(morningItems: [], mood: focused.level, moodLabel: focused.label,
+                                       task: nil, time: nil, durationMinutes: nil)
+        CheckInService.save(plan, in: context)
+        let checkIn = try XCTUnwrap(CheckInService.todaysCheckIn(context))
+        XCTAssertEqual(checkIn.moodRaw, "good", "server still gets the level")
+        XCTAssertEqual(checkIn.moodText, "Tập trung")
+    }
+
+    func testQuickAnswerUsesRenamedBuiltInFeeling() throws {
+        let container = Persistence.makeContainer(inMemory: true)
+        let context = container.mainContext
+        ChipStore.seedMoods(in: context)
+        let good = try XCTUnwrap(try context.fetch(FetchDescriptor<Chip>()).first { $0.level == .good })
+        ChipStore.save(ChipDraft(name: "Năng suất", level: .good), group: .mood, editing: good, in: context)
+
+        CheckInService.recordMood(.good, in: context)
+        XCTAssertEqual(CheckInService.todaysCheckIn(context)?.moodText, "Năng suất")
     }
 
     func testCategoryAddedInSettingsShowsBeforeFirstUse() {

@@ -220,7 +220,7 @@ private struct CheckInExport: Encodable {
     @MainActor
     init(_ checkIn: CheckIn) {
         day = DayClock.isoDay(checkIn.day)
-        mood = checkIn.mood?.label
+        mood = checkIn.moodText
         morning = checkIn.morningItems
         afternoonTaskIds = checkIn.afternoonTaskIds
     }
