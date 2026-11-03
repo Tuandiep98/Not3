@@ -52,6 +52,8 @@ struct AddTaskIntent: AppIntent {
 
 struct CompleteTaskIntent: AppIntent {
     static let title: LocalizedStringResource = "Đánh dấu việc xong"
+    // Lists task names: not from a locked iPhone.
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Việc", requestValueDialog: "Việc nào?")
     var task: TaskEntity
@@ -101,6 +103,7 @@ struct StartNextTaskIntent: AppIntent {
 
 struct TodayStatusIntent: AppIntent {
     static let title: LocalizedStringResource = "Hôm nay còn việc gì"
+    static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     init() {}
 

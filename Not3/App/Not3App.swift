@@ -34,8 +34,12 @@ struct Not3App: App {
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active:
+                AppLock.shared.didBecomeActive()
                 Task { await AppLifecycle.onForeground() }
+            case .inactive:
+                AppLock.shared.willResignActive()
             case .background:
+                AppLock.shared.didEnterBackground()
                 // Widgets show the latest state; iOS wakes us later to refresh.
                 WidgetBridge.publish()
                 BackgroundRefresh.schedule()

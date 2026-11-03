@@ -8,6 +8,8 @@ struct FolderWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: WidgetKind.folder, intent: SelectFolderIntent.self, provider: FolderProvider()) { entry in
             FolderWidgetView(entry: entry)
+                // App lock on: hidden on the Lock Screen / locked device.
+                .privacySensitive(entry.snapshot.isPrivate == true)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Thư mục ghi chú")

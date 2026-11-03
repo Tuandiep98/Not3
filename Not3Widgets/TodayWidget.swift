@@ -8,6 +8,8 @@ struct TodayWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKind.today, provider: SnapshotProvider()) { entry in
             TodayWidgetView(entry: entry)
+                // App lock on: hidden on the Lock Screen / locked device.
+                .privacySensitive(entry.snapshot.isPrivate == true)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Việc hôm nay")

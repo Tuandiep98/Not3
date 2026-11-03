@@ -70,18 +70,21 @@ enum SpotlightIndexer {
     }
 
     private static func signature(_ note: Note) -> String {
-        "\(note.updatedAt.timeIntervalSince1970)|\(note.folder?.name ?? "")"
+        "\(note.updatedAt.timeIntervalSince1970)|\(note.folder?.name ?? "")|\(AppSettings.appLockEnabled)"
     }
 
     private static func signature(_ task: TaskItem) -> String {
-        "\(task.updatedAt.timeIntervalSince1970)|\(task.statusRaw)|\(DayClock.isoDay(Date()))"
+        "\(task.updatedAt.timeIntervalSince1970)|\(task.statusRaw)|\(DayClock.isoDay(Date()))|\(AppSettings.appLockEnabled)"
     }
 
     static func item(for note: Note) -> CSSearchableItem {
         let attributes = CSSearchableItemAttributeSet(contentType: .text)
         attributes.title = note.displayTitle
-        attributes.contentDescription = [note.folder?.name, note.preview].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
-        attributes.textContent = ([note.body] + note.sortedChecklist.map(\.text)).joined(separator: "\n")
+        // App lock on: titles only, the content stays behind Face ID.
+        if !AppSettings.appLockEnabled {
+            attributes.contentDescription = [note.folder?.name, note.preview].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            attributes.textContent = ([note.body] + note.sortedChecklist.map(\.text)).joined(separator: "\n")
+        }
         attributes.keywords = note.categories
         attributes.contentModificationDate = note.updatedAt
         let item = CSSearchableItem(uniqueIdentifier: identifier(note: note.id), domainIdentifier: "\(domain).notes", attributeSet: attributes)

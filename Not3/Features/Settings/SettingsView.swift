@@ -18,6 +18,10 @@ struct SettingsView: View {
     @AppStorage(SettingsKey.iCloudSync) private var iCloudSync = true
     @AppStorage(SettingsKey.syncNoteContent) private var syncNoteContent = true
     @AppStorage(SettingsKey.aiReadsIntegrations) private var aiReadsIntegrations = true
+    @AppStorage(SettingsKey.appLock) private var appLock = false
+    @AppStorage(SettingsKey.appLockDelay) private var appLockDelay = 60
+    @State private var exportURL: URL?
+    @State private var isExporting = false
 
     @State private var nonce = SupabaseService.makeNonce()
     @State private var errorMessage: String?
@@ -91,6 +95,8 @@ struct SettingsView: View {
                 Text("Nội dung note được đồng bộ lên server để AI gắn chip và viết tổng kết tuần. Tắt đi thì note chỉ lưu trên iCloud.")
             }
 
+            privacySection
+
             accountSection
         }
         .navigationTitle("Cài đặt")
@@ -142,6 +148,51 @@ struct SettingsView: View {
     }
 
     @ViewBuilder
+    private var privacySection: some View {
+        Section {
+            Toggle("Khoá bằng \(AppLock.biometryName)", isOn: Binding(
+                get: { appLock },
+                set: { wanted in Task { _ = await AppLock.shared.setEnabled(wanted) } }
+            ))
+            if appLock {
+                Picker("Khoá", selection: $appLockDelay) {
+                    ForEach(AppLock.Delay.allCases) { Text($0.label).tag($0.rawValue) }
+                }
+            }
+            Button {
+                Task { await export() }
+            } label: {
+                HStack {
+                    Label("Xuất dữ liệu", systemImage: "square.and.arrow.up.on.square")
+                    Spacer()
+                    if isExporting { ProgressView() }
+                }
+            }
+            .disabled(isExporting)
+            if let exportURL {
+                ShareLink(item: exportURL) {
+                    Label("Lưu hoặc gửi \(exportURL.lastPathComponent)", systemImage: "doc.zipper")
+                }
+            }
+        } header: {
+            Text("Bảo mật & dữ liệu")
+        } footer: {
+            Text("Khi khoá: widget ẩn nội dung lúc máy khoá, Spotlight chỉ hiện tiêu đề. Bản xuất là tệp .zip gồm ghi chú Markdown kèm ảnh, việc (Markdown + JSON), check-in và việc lặp lại.")
+        }
+    }
+
+    private func export() async {
+        isExporting = true
+        defer { isExporting = false }
+        // Let the spinner draw before the (synchronous) export runs.
+        await Task.yield()
+        do {
+            exportURL = try ExportService.export(in: context)
+        } catch {
+            errorMessage = "Không xuất được dữ liệu: \(error.localizedDescription)"
+        }
+    }
+
     private var accountSection: some View {
         Section {
             if !supabase.isConfigured {

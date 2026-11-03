@@ -161,7 +161,8 @@ enum WidgetBridge {
             morning: Array(morning.suffix(12)),
             tasks: Array(today),
             week: DayClock.daysOfWeek(now).map { CheckInPlanner.isMeaningful(day: $0, tasks: tasks) },
-            folders: folders(in: context)
+            folders: folders(in: context),
+            isPrivate: AppSettings.appLockEnabled
         )
     }
 

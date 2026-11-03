@@ -86,6 +86,8 @@ struct WidgetSnapshot: Codable, Equatable, Sendable {
     var tasks: [TaskRow]             // "Việc hôm nay" (same rules as the app)
     var week: [Bool]                 // Mon…Sun: a meaningful day?
     var folders: [FolderRow]         // first = all notes
+    /// App lock (Face ID) is on: widgets redact their content when the device is locked.
+    var isPrivate: Bool? = nil
 
     var meaningfulDays: Int { week.filter { $0 }.count }
     var openTasks: [TaskRow] { tasks.filter { !$0.isDone } }

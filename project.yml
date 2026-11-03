@@ -74,6 +74,7 @@ targets:
             CFBundleURLSchemes: [not3]
         NSCalendarsFullAccessUsageDescription: Not3 đọc lịch hôm nay để gợi ý việc buổi sáng lúc check-in, và ghi kế hoạch buổi chiều vào lịch "Not3".
         NSCameraUsageDescription: Not3 dùng camera để bạn chụp ảnh đính kèm vào ghi chú.
+        NSFaceIDUsageDescription: Not3 dùng Face ID để mở khoá app khi bạn bật "Khoá bằng Face ID".
         NSMicrophoneUsageDescription: Not3 dùng micro để bạn nói việc cần làm thay vì gõ.
         NSSpeechRecognitionUsageDescription: Not3 chuyển giọng nói thành chip việc cần làm, xử lý trên máy khi có thể.
         SupabaseHost: $(SUPABASE_HOST)

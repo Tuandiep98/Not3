@@ -10,6 +10,8 @@ struct CheckInWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: WidgetKind.checkIn, provider: SnapshotProvider()) { entry in
             CheckInWidgetView(entry: entry)
+                // App lock on: hidden on the Lock Screen / locked device.
+                .privacySensitive(entry.snapshot.isPrivate == true)
                 .containerBackground(for: .widget) { Color(.systemBackground) }
         }
         .configurationDisplayName("Check-in")

@@ -10,6 +10,8 @@ enum SettingsKey {
     static let aiReadsIntegrations = "aiReadsIntegrations"
     static let addToCalendar = "addToCalendar"
     static let eveningCheckIn = "eveningCheckIn"
+    static let appLock = "appLock"
+    static let appLockDelay = "appLockDelaySeconds"
 }
 
 enum AppSettings {
@@ -23,6 +25,8 @@ enum AppSettings {
             SettingsKey.aiReadsIntegrations: true,
             SettingsKey.addToCalendar: true,
             SettingsKey.eveningCheckIn: true,
+            SettingsKey.appLock: false,
+            SettingsKey.appLockDelay: 60,
         ])
     }
 
@@ -30,4 +34,6 @@ enum AppSettings {
     static var checkInMinute: Int { UserDefaults.standard.integer(forKey: SettingsKey.checkInMinute) }
     static var localFallback: Bool { UserDefaults.standard.bool(forKey: SettingsKey.localFallback) }
     static var syncNoteContent: Bool { UserDefaults.standard.bool(forKey: SettingsKey.syncNoteContent) }
+    static var appLockEnabled: Bool { UserDefaults.standard.bool(forKey: SettingsKey.appLock) }
+    static var appLockDelay: Int { UserDefaults.standard.integer(forKey: SettingsKey.appLockDelay) }
 }
