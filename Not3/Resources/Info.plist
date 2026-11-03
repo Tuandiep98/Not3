@@ -21,7 +21,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -45,6 +45,8 @@
 	<string>Not3 dùng Face ID để mở khoá app khi bạn bật "Khoá bằng Face ID".</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Not3 đọc bài tập, chánh niệm, số bước và giấc ngủ để ghi việc đã làm vào Nhật ký và Tổng kết tuần. Dữ liệu chỉ xử lý trên iPhone, không gửi lên server.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Not3 ghi cảm nhận bạn chọn lúc check-in trưa và lúc khép lại ngày vào mục Tâm trạng của app Sức khỏe, khi bạn bật tuỳ chọn này.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Not3 dùng micro để bạn nói việc cần làm thay vì gõ.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>

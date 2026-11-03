@@ -12,7 +12,7 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.6"
+    MARKETING_VERSION: "1.0.7"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
     DEVELOPMENT_TEAM: "8CH38V6M42"
@@ -59,6 +59,8 @@ targets:
       path: Not3/Resources/Info.plist
       properties:
         CFBundleDisplayName: Not3
+        # XcodeGen writes a literal "1.0" otherwise; extensions must match the app's version.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleDevelopmentRegion: vi
         # Only HTTPS / Apple crypto (exempt): skips the TestFlight "Missing Compliance" prompt.
         ITSAppUsesNonExemptEncryption: false
@@ -82,6 +84,8 @@ targets:
         NSCalendarsFullAccessUsageDescription: Not3 đọc lịch hôm nay để gợi ý việc buổi sáng lúc check-in, và ghi kế hoạch buổi chiều vào lịch "Not3".
         NSRemindersFullAccessUsageDescription: Not3 đưa lời nhắc đến hạn vào việc hôm nay và đánh dấu xong lời nhắc khi bạn tick việc đó.
         NSHealthShareUsageDescription: Not3 đọc bài tập, chánh niệm, số bước và giấc ngủ để ghi việc đã làm vào Nhật ký và Tổng kết tuần. Dữ liệu chỉ xử lý trên iPhone, không gửi lên server.
+        # Required by App Store Connect whenever HealthKit is linked (ITMS-90683); used to write State of Mind.
+        NSHealthUpdateUsageDescription: Not3 ghi cảm nhận bạn chọn lúc check-in trưa và lúc khép lại ngày vào mục Tâm trạng của app Sức khỏe, khi bạn bật tuỳ chọn này.
         NSCameraUsageDescription: Not3 dùng camera để bạn chụp ảnh đính kèm vào ghi chú.
         NSFaceIDUsageDescription: Not3 dùng Face ID để mở khoá app khi bạn bật "Khoá bằng Face ID".
         NSMicrophoneUsageDescription: Not3 dùng micro để bạn nói việc cần làm thay vì gõ.
@@ -110,6 +114,8 @@ targets:
       path: Not3Widgets/Info.plist
       properties:
         CFBundleDisplayName: Not3
+        # XcodeGen writes a literal "1.0" otherwise; extensions must match the app's version.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
@@ -132,6 +138,8 @@ targets:
       path: Not3Share/Info.plist
       properties:
         CFBundleDisplayName: Not3
+        # XcodeGen writes a literal "1.0" otherwise; extensions must match the app's version.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
@@ -164,6 +172,8 @@ targets:
       path: Not3Watch/Info.plist
       properties:
         CFBundleDisplayName: Not3
+        # XcodeGen writes a literal "1.0" otherwise; extensions must match the app's version.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleDevelopmentRegion: vi
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.tuandiep.not3
@@ -188,6 +198,8 @@ targets:
       path: Not3WatchWidgets/Info.plist
       properties:
         CFBundleDisplayName: Not3
+        # XcodeGen writes a literal "1.0" otherwise; extensions must match the app's version.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
