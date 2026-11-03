@@ -6,7 +6,7 @@ struct AddNoteIntent: AppIntent {
     static let title: LocalizedStringResource = "Ghi chú nhanh"
     static let description = IntentDescription("Lưu một ghi chú vào thư mục \"Ghi chú nhanh\". Dòng đầu là tiêu đề.")
 
-    @Parameter(title: "Nội dung", requestValueDialog: "Ghi gì?", inputOptions: String.IntentInputOptions(multiline: true))
+    @Parameter(title: "Nội dung", inputOptions: String.IntentInputOptions(multiline: true), requestValueDialog: "Ghi gì?")
     var text: String
 
     static var parameterSummary: some ParameterSummary {

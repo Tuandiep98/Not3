@@ -26,7 +26,7 @@ enum RecurrenceService {
         var created: [TaskItem] = []
         for series in all where series.startDay <= today && series.rule.occurs(on: today) {
             if let last = series.lastGeneratedDay, last >= today { continue }
-            let id = series.id
+            let id: UUID? = series.id
             let occurrences = (try? context.fetch(FetchDescriptor<TaskItem>(predicate: #Predicate { $0.seriesId == id }))) ?? []
             // The previous occurrence left open would otherwise carry over forever next to the new one.
             for old in occurrences where (old.status == .todo || old.status == .doing) && (old.plannedAt ?? old.createdAt) < today {

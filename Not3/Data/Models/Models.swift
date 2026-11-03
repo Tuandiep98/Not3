@@ -268,7 +268,7 @@ final class TaskSeries {
     var hour: Int?
     var minute: Int?
     var durationMinutes: Int?
-    var ruleRaw: String = Recurrence.daily.rawValue
+    var ruleRaw: String = "daily"
     var startDay: Date = Date()
     var isActive: Bool = true
     var addToCalendar: Bool = false
