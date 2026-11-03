@@ -40,6 +40,7 @@ export function mapStatus(
   }
   if (provider === "jira") {
     if (status === "done") return "done";
+    if (status === "unassigned") return "cancelled";
     if (status === "in_progress") return "doing";
     if (status === "todo") return "todo";
   }
@@ -54,6 +55,7 @@ type ExternalRow = {
   title: string;
   url: string | null;
   status: string | null;
+  role?: string | null;
   updated_at: string;
 };
 
@@ -62,6 +64,8 @@ type TaskRow = {
   title: string;
   status: TaskStatus;
   created_at: string;
+  /** "integration" = created by the sync from an assignment, not by the user. */
+  source?: string | null;
 };
 
 const JIRA_KEY = /\b([A-Z][A-Z0-9]+-\d+)\b/g;
@@ -140,14 +144,14 @@ export async function linkAndSync(
       db
         .from("external_items")
         .select(
-          "source, external_id, kind, title, url, status, status_name, updated_at",
+          "source, external_id, kind, title, url, status, status_name, role, updated_at",
         )
         .eq("user_id", userId)
         .in("source", ["github", "jira"])
         .gte("updated_at", since),
       db
         .from("tasks")
-        .select("id, title, status, created_at")
+        .select("id, title, status, created_at, source")
         .eq("user_id", userId)
         // Every open task, however old: unfinished work carries over until it is done, so its
         // link must keep following GitHub / Jira (no age limit for status sync).
@@ -163,8 +167,8 @@ export async function linkAndSync(
   const linked = new Set((links ?? []).map((l) => l.task_id));
 
   // 1. New links for unlinked open tasks (only recent ones are matched automatically).
-  const unlinked = open.filter((t) =>
-    !linked.has(t.id) && t.created_at >= since
+  const unlinked = open.filter(
+    (t) => !linked.has(t.id) && t.created_at >= since,
   );
   const newLinks: Record<string, unknown>[] = [];
   const stillUnlinked: TaskRow[] = [];
@@ -244,10 +248,11 @@ export async function linkAndSync(
   const linkedIds = [...new Set((allLinks ?? []).map((l) => l.task_id))];
   const taskById = new Map<string, TaskRow>(open.map((t) => [t.id, t]));
   for (let i = 0; i < linkedIds.length; i += 200) {
-    const { data } = await db.from("tasks").select(
-      "id, title, status, created_at",
-    )
-      .eq("user_id", userId).in("id", linkedIds.slice(i, i + 200));
+    const { data } = await db
+      .from("tasks")
+      .select("id, title, status, created_at, source")
+      .eq("user_id", userId)
+      .in("id", linkedIds.slice(i, i + 200));
     for (const t of (data ?? []) as TaskRow[]) taskById.set(t.id, t);
   }
   const changed: string[] = [];
@@ -257,34 +262,48 @@ export async function linkAndSync(
     if (!item) continue;
     if (
       link.external_updated_at && item.updated_at <= link.external_updated_at
-    ) continue;
-    await db.from("task_links").update({
-      external_status: item.status,
-      external_updated_at: item.updated_at,
-      url: item.url,
-      title: item.title,
-    }).eq("id", link.id);
-
+    ) {
+      continue;
+    }
     const task = taskById.get(link.task_id);
+    const status = effectiveStatus(item, task);
+    await db
+      .from("task_links")
+      .update({
+        external_status: status,
+        external_updated_at: item.updated_at,
+        url: item.url,
+        title: item.title,
+      })
+      .eq("id", link.id);
+
     if (!task) continue;
-    const next = mapStatus(item.source, item.kind, item.status);
+    const next = mapStatus(item.source, item.kind, status);
     const before = mapStatus(
       item.source,
       item.kind,
       link.external_status ?? null,
     );
-    const decision = transition(task.status, before, next, item.status);
+    const decision = transition(task.status, before, next, status);
     if (!decision) continue;
 
-    await db.from("tasks").update({
-      status: decision.status,
-      completed_at: decision.status === "done" ? now() : null,
-      updated_at: now(),
-      updated_by: "sync",
-      ...(decision.reopened
-        ? { reopened_at: now(), reopened_reason: reopenReason(item) }
-        : {}),
-    }).eq("id", task.id);
+    await db
+      .from("tasks")
+      .update({
+        status: decision.status,
+        completed_at: decision.status === "done" ? now() : null,
+        updated_at: now(),
+        updated_by: "sync",
+        ...(decision.reopened
+          ? {
+            reopened_at: now(),
+            reopened_reason: link.external_status === "unassigned"
+              ? `Được giao lại ${item.external_id}`
+              : reopenReason(item),
+          }
+          : {}),
+      })
+      .eq("id", task.id);
     changed.push(task.id);
 
     if (decision.status === "done" || decision.reopened) {
@@ -299,6 +318,29 @@ export async function linkAndSync(
     }
   }
   return changed;
+}
+
+/**
+ * The item state that drives a linked task. A Jira ticket the sync turned into a task because it
+ * was assigned to me reads "unassigned" (→ cancelled) once it is assigned to someone else or no
+ * one; assigned back, the usual reopen path brings the task back. Done still wins (finished, then
+ * handed to QA). The user's own tasks that merely mention the key are left alone.
+ */
+export function effectiveStatus(
+  item: Pick<ExternalRow, "source" | "kind" | "status" | "role">,
+  task: Pick<TaskRow, "source"> | undefined,
+): string | null {
+  if (
+    item.source === "jira" &&
+    item.kind === "issue" &&
+    task?.source === "integration" &&
+    item.role != null &&
+    item.role !== "assignee" &&
+    item.status !== "done"
+  ) {
+    return "unassigned";
+  }
+  return item.status;
 }
 
 /** Why a task came back, in the user's words: "JIRA-120 → In Progress", "Được nhờ review lại"… */

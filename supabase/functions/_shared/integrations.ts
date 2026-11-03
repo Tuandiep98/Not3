@@ -363,10 +363,9 @@ async function githubScanInstalledRepos(
     // PRs from others that ask this user for a review.
     const open = await githubGet<
       (GithubSearchItem & { requested_reviewers?: { login: string }[] })[]
-    >(
-      `/repos/${repo.full_name}/pulls?state=open&per_page=50`,
-      token,
-    ).catch(() => []);
+    >(`/repos/${repo.full_name}/pulls?state=open&per_page=50`, token).catch(
+      () => [],
+    );
     for (const pr of open) {
       if (!pr.requested_reviewers?.some((r) => r.login === login)) continue;
       if (items.some((i) => i.html_url === pr.html_url)) continue;
@@ -468,14 +467,18 @@ export function githubItem(
     title = `${isPR ? "PR" : "Issue"} #${it.number} → ${doneLabel(it, rules)}`;
     status = "done";
   } else if (
-    isPR && it.user?.login === login && rules.pr_done_when === "approved" &&
+    isPR &&
+    it.user?.login === login &&
+    rules.pr_done_when === "approved" &&
     it.approved
   ) {
     title = `PR #${it.number} đã được duyệt`;
     status = "done";
   } else if (
-    isPR && it.user?.login === login &&
-    rules.pr_done_when === "ready_for_review" && it.draft === false
+    isPR &&
+    it.user?.login === login &&
+    rules.pr_done_when === "ready_for_review" &&
+    it.draft === false
   ) {
     title = `PR #${it.number} sẵn sàng review`;
     status = "done";
@@ -487,7 +490,7 @@ export function githubItem(
       ? `Issue #${it.number} đã đóng`
       : `Issue #${it.number}: ${it.title}`;
     status = it.state === "closed"
-      ? (it.state_reason === "not_planned" ? "not_planned" : "completed")
+      ? it.state_reason === "not_planned" ? "not_planned" : "completed"
       : "open";
   }
   return {
@@ -515,17 +518,17 @@ async function markApproved(
   login: string,
   items: GithubSearchItem[],
 ): Promise<void> {
-  const mine = items.filter((it) =>
-    it.pull_request && it.state === "open" && it.user?.login === login
-  ).slice(0, 15);
+  const mine = items
+    .filter(
+      (it) =>
+        it.pull_request && it.state === "open" && it.user?.login === login,
+    )
+    .slice(0, 15);
   for (const it of mine) {
     const path = it.repository_url.split("api.github.com")[1];
     const reviews = await githubGet<
       { state: string; user?: { login: string } }[]
-    >(
-      `${path}/pulls/${it.number}/reviews?per_page=100`,
-      token,
-    ).catch(() => []);
+    >(`${path}/pulls/${it.number}/reviews?per_page=100`, token).catch(() => []);
     // Latest review per reviewer decides (a later "changes requested" cancels an approval).
     const latest = new Map<string, string>();
     for (const r of reviews) {
@@ -547,7 +550,9 @@ async function githubReviewRequests(
   try {
     const r = await githubGet<{ items: GithubSearchItem[] }>(
       `/search/issues?q=${
-        encodeURIComponent(`is:pr is:open review-requested:${login}`)
+        encodeURIComponent(
+          `is:pr is:open review-requested:${login}`,
+        )
       }&per_page=50`,
       token,
     );
@@ -556,16 +561,18 @@ async function githubReviewRequests(
     // Search refused: ask each open PR we already have that is not the user's own.
     const urls = new Set<string>();
     for (
-      const it of candidates.filter((c) =>
-        c.pull_request && c.state === "open" && c.user?.login !== login
-      ).slice(0, 20)
+      const it of candidates
+        .filter(
+          (c) =>
+            c.pull_request && c.state === "open" && c.user?.login !== login,
+        )
+        .slice(0, 20)
     ) {
       const path = it.repository_url.split("api.github.com")[1];
       const pr = await githubGet<{ requested_reviewers?: { login: string }[] }>(
         `${path}/pulls/${it.number}`,
         token,
-      )
-        .catch(() => null);
+      ).catch(() => null);
       if (pr?.requested_reviewers?.some((r) => r.login === login)) {
         urls.add(it.html_url);
       }
@@ -626,10 +633,10 @@ export async function fetchGithub(
       await markApproved(token, login, unique);
     }
     const reviewed = settings.reviews_submitted
-      ? await searchUrls(
+      ? ((await searchUrls(
         token,
         `is:pr reviewed-by:${login} updated:>=${day}`,
-      ) ?? new Set<string>()
+      )) ?? new Set<string>())
       : new Set<string>();
     for (const it of unique) {
       const item = githubItem(it, login, reviewed.has(it.html_url), rules);
@@ -637,9 +644,9 @@ export async function fetchGithub(
         item.status === "reviewed";
       if (
         isReview
-          ? (item.status === "review_requested"
+          ? item.status === "review_requested"
             ? settings.review_requests
-            : settings.reviews_submitted)
+            : settings.reviews_submitted
           : settings.prs
       ) {
         items.push(item);
@@ -648,9 +655,13 @@ export async function fetchGithub(
   }
 
   // --- Events feed: commits, releases & tags, merges, comments (one call) ---
-  const needEvents = settings.commits || settings.releases || settings.merges ||
+  const needEvents = settings.commits ||
+    settings.releases ||
+    settings.merges ||
     settings.comments ||
-    settings.mentions || settings.builds || settings.deploys;
+    settings.mentions ||
+    settings.builds ||
+    settings.deploys;
   const events = needEvents || activity
     ? await githubGet<GithubEvent[]>(
       `/users/${login}/events?per_page=100`,
@@ -664,18 +675,18 @@ export async function fetchGithub(
     })
     : [];
   // Every event of the feed (up to 100, recent days too): timestamps for "Tổng kết tuần".
-  activity?.push(
-    ...githubActivity(events as unknown as GithubActivityEvent[]),
-  );
+  activity?.push(...githubActivity(events as unknown as GithubActivityEvent[]));
   const today = needEvents
     ? events.filter((e) => e.created_at >= sinceIso)
     : [];
   items.push(...githubEventItems(today, login, day, settings));
   const commentedOn = new Set(
-    today.filter((e) =>
-      e.type === "IssueCommentEvent" ||
-      e.type === "PullRequestReviewCommentEvent"
-    )
+    today
+      .filter(
+        (e) =>
+          e.type === "IssueCommentEvent" ||
+          e.type === "PullRequestReviewCommentEvent",
+      )
       .map((e) => (e.payload.issue ?? e.payload.pull_request)?.html_url ?? ""),
   );
 
@@ -683,10 +694,14 @@ export async function fetchGithub(
   if (settings.mentions) {
     const mentioned = await githubGet<{ items: GithubSearchItem[] }>(
       `/search/issues?q=${
-        encodeURIComponent(`mentions:${login} updated:>=${day}`)
+        encodeURIComponent(
+          `mentions:${login} updated:>=${day}`,
+        )
       }&per_page=30`,
       token,
-    ).then((r) => r.items).catch(() => [] as GithubSearchItem[]);
+    )
+      .then((r) => r.items)
+      .catch(() => [] as GithubSearchItem[]);
     const known = new Set(items.map((i) => i.external_id));
     for (const it of mentioned) {
       if (known.has(it.html_url) || it.user?.login === login) continue;
@@ -719,10 +734,10 @@ export async function fetchGithub(
     ].slice(0, 10);
     for (const full of repos) {
       if (settings.builds) {
-        items.push(...await githubBuilds(token, login, full, sinceIso, day));
+        items.push(...(await githubBuilds(token, login, full, sinceIso, day)));
       }
       if (settings.deploys) {
-        items.push(...await githubDeploys(token, login, full, sinceIso));
+        items.push(...(await githubDeploys(token, login, full, sinceIso)));
       }
     }
   }
@@ -780,8 +795,12 @@ export function githubEventItems(
       }
       case "CreateEvent": {
         if (
-          !settings.releases || e.payload.ref_type !== "tag" || !e.payload.ref
-        ) break;
+          !settings.releases ||
+          e.payload.ref_type !== "tag" ||
+          !e.payload.ref
+        ) {
+          break;
+        }
         if (releaseTags.has(`${scope}@${e.payload.ref}`)) break;
         items.push({
           ...base,
@@ -796,9 +815,13 @@ export function githubEventItems(
       case "PullRequestEvent": {
         const pr = e.payload.pull_request;
         if (
-          !settings.merges || e.payload.action !== "closed" || !pr?.merged ||
+          !settings.merges ||
+          e.payload.action !== "closed" ||
+          !pr?.merged ||
           pr.user?.login === login
-        ) break;
+        ) {
+          break;
+        }
         items.push({
           ...base,
           external_id: `merge:${pr.html_url}`,
@@ -826,9 +849,10 @@ export function githubEventItems(
     }
   }
   // Tags seen before their release in the feed (newest first) are dropped here.
-  const kept = items.filter((i) =>
-    i.kind !== "tag" ||
-    !releaseTags.has(`${i.scope}@${i.external_id.split(":").pop()}`)
+  const kept = items.filter(
+    (i) =>
+      i.kind !== "tag" ||
+      !releaseTags.has(`${i.scope}@${i.external_id.split(":").pop()}`),
   );
   for (const [scope, p] of pushes) {
     const repo = scope.split("/")[1] ?? scope;
@@ -882,7 +906,9 @@ async function githubBuilds(
 ): Promise<ExternalItem[]> {
   const data = await githubGet<{ workflow_runs: WorkflowRun[] }>(
     `/repos/${full}/actions/runs?actor=${encodeURIComponent(login)}&created=${
-      encodeURIComponent(`>=${sinceIso}`)
+      encodeURIComponent(
+        `>=${sinceIso}`,
+      )
     }&per_page=50`,
     token,
   ).catch(() => null); // 403 = Actions permission not granted yet
@@ -942,9 +968,9 @@ async function githubDeploys(
   ).catch(() => null);
   if (!list) return [];
   const repo = full.split("/")[1] ?? full;
-  const mine = list.filter((d) =>
-    d.created_at >= sinceIso && d.creator?.login === login
-  ).slice(0, 10);
+  const mine = list
+    .filter((d) => d.created_at >= sinceIso && d.creator?.login === login)
+    .slice(0, 10);
   const items: ExternalItem[] = [];
   for (const d of mine) {
     const [latest] = await githubGet<
@@ -971,7 +997,8 @@ async function githubDeploys(
       title: `Deploy ${d.environment} · ${d.ref}${
         status === "failed" ? " lỗi" : ""
       } · ${repo}`.slice(0, 120),
-      url: latest?.log_url ?? latest?.target_url ??
+      url: latest?.log_url ??
+        latest?.target_url ??
         `https://github.com/${full}/deployments`,
       status,
       occurred_at: latest?.created_at ?? d.created_at,
@@ -1079,12 +1106,16 @@ export async function fetchJira(
       jql,
       "summary,status,updated,assignee,reporter",
     );
-    items.push(...issues.map((issue) => {
-      const item = jiraItem(issue, site, me, rules);
-      // Not mine to do, but I asked to follow it.
-      if (item.role === "involved" && settings.watching) item.role = "watcher";
-      return item;
-    }));
+    items.push(
+      ...issues.map((issue) => {
+        const item = jiraItem(issue, site, me, rules);
+        // Not mine to do, but I asked to follow it.
+        if (item.role === "involved" && settings.watching) {
+          item.role = "watcher";
+        }
+        return item;
+      }),
+    );
   }
   // Optional journal sources must never break the main sync.
   if (settings.transitions) {
@@ -1093,19 +1124,23 @@ export async function fetchJira(
       token,
       "status CHANGED BY currentUser() AFTER startOfDay()",
       "summary,status,updated",
-    )
-      .catch(() => [] as JiraIssue[]);
-    items.push(...changed.map((issue) => ({
-      source: "jira" as const,
-      external_id: `transition:${issue.key}:${day}`,
-      kind: "transition",
-      title: `Chuyển ${issue.key} → ${issue.fields.status.name}`.slice(0, 120),
-      url: site ? `${site}/browse/${issue.key}` : null,
-      status: "done",
-      occurred_at: new Date(issue.fields.updated).toISOString(),
-      role: "author" as const,
-      scope: issue.key.split("-")[0],
-    })));
+    ).catch(() => [] as JiraIssue[]);
+    items.push(
+      ...changed.map((issue) => ({
+        source: "jira" as const,
+        external_id: `transition:${issue.key}:${day}`,
+        kind: "transition",
+        title: `Chuyển ${issue.key} → ${issue.fields.status.name}`.slice(
+          0,
+          120,
+        ),
+        url: site ? `${site}/browse/${issue.key}` : null,
+        status: "done",
+        occurred_at: new Date(issue.fields.updated).toISOString(),
+        role: "author" as const,
+        scope: issue.key.split("-")[0],
+      })),
+    );
   }
   if (settings.worklogs) {
     const logged = await jiraSearch(
@@ -1113,19 +1148,20 @@ export async function fetchJira(
       token,
       "worklogAuthor = currentUser() AND worklogDate >= startOfDay()",
       "summary,updated",
-    )
-      .catch(() => [] as JiraIssue[]);
-    items.push(...logged.map((issue) => ({
-      source: "jira" as const,
-      external_id: `worklog:${issue.key}:${day}`,
-      kind: "worklog",
-      title: `Log work ${issue.key}: ${issue.fields.summary}`.slice(0, 120),
-      url: site ? `${site}/browse/${issue.key}` : null,
-      status: "done",
-      occurred_at: new Date(issue.fields.updated).toISOString(),
-      role: "author" as const,
-      scope: issue.key.split("-")[0],
-    })));
+    ).catch(() => [] as JiraIssue[]);
+    items.push(
+      ...logged.map((issue) => ({
+        source: "jira" as const,
+        external_id: `worklog:${issue.key}:${day}`,
+        kind: "worklog",
+        title: `Log work ${issue.key}: ${issue.fields.summary}`.slice(0, 120),
+        url: site ? `${site}/browse/${issue.key}` : null,
+        status: "done",
+        occurred_at: new Date(issue.fields.updated).toISOString(),
+        role: "author" as const,
+        scope: issue.key.split("-")[0],
+      })),
+    );
   }
   // Real time spent, for "Tổng kết tuần": started + timeSpentSeconds of my own logs (last 2 days,
   // so a log added late for yesterday is still picked up; upserts keep it to one row).
@@ -1137,13 +1173,13 @@ export async function fetchJira(
       "summary",
     ).catch(() => [] as JiraIssue[]);
     activity.push(
-      ...await jiraWorklogs(
+      ...(await jiraWorklogs(
         cloudId,
         token.access_token,
         me,
         recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
         new Date(Date.now() - 3 * 86_400_000),
-      ),
+      )),
     );
   }
   return items;
@@ -1177,9 +1213,12 @@ export function jiraItem(
     url: site ? `${site}/browse/${issue.key}` : null,
     status,
     occurred_at: new Date(issue.fields.updated).toISOString(),
-    role: myAccountId && issue.fields.assignee?.accountId === myAccountId
+    // No accountId = unknown, not "involved": an unknown role must never read as "unassigned".
+    role: !myAccountId
+      ? undefined
+      : issue.fields.assignee?.accountId === myAccountId
       ? "assignee"
-      : myAccountId && issue.fields.reporter?.accountId === myAccountId
+      : issue.fields.reporter?.accountId === myAccountId
       ? "reporter"
       : "involved",
     scope: issue.key.split("-")[0],
@@ -1195,8 +1234,12 @@ export async function jiraStatuses(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ name: string; category: string }[]> {
-  const { data: row } = await db.from("integrations").select("meta")
-    .eq("user_id", userId).eq("provider", "jira").maybeSingle();
+  const { data: row } = await db
+    .from("integrations")
+    .select("meta")
+    .eq("user_id", userId)
+    .eq("provider", "jira")
+    .maybeSingle();
   const cloudId = String(
     (row?.meta as Record<string, unknown> | null)?.cloud_id ?? "",
   );
@@ -1204,10 +1247,7 @@ export async function jiraStatuses(
   const token = await validToken(db, userId, "jira");
   const list = await jiraFetch<
     { name: string; statusCategory?: { key: string } }[]
-  >(
-    `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/status`,
-    token,
-  );
+  >(`https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/status`, token);
   const byName = new Map<string, { name: string; category: string }>();
   for (const s of list) {
     const key = s.name.toLowerCase();
@@ -1219,9 +1259,10 @@ export async function jiraStatuses(
     }
   }
   const order = { new: 0, indeterminate: 1, done: 2 } as Record<string, number>;
-  return [...byName.values()].sort((a, b) =>
-    (order[a.category] ?? 1) - (order[b.category] ?? 1) ||
-    a.name.localeCompare(b.name)
+  return [...byName.values()].sort(
+    (a, b) =>
+      (order[a.category] ?? 1) - (order[b.category] ?? 1) ||
+      a.name.localeCompare(b.name),
   );
 }
 
@@ -1264,7 +1305,9 @@ export async function fetchLinkedItem(
   if (!cloudId) return null;
   const issue = await jiraFetch<JiraIssue>(
     `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${
-      encodeURIComponent(externalId)
+      encodeURIComponent(
+        externalId,
+      )
     }?fields=summary,status,updated,assignee,reporter`,
     token,
   ).catch(() => null);
@@ -1276,6 +1319,39 @@ export async function fetchLinkedItem(
       rules,
     )
     : null;
+}
+
+/**
+ * Open tasks linked to Jira tickets the searches did not return — typically because I was
+ * unassigned (`assignee = currentUser()` no longer matches): re-read them one by one so the change
+ * reaches the task (links.ts cancels a synced task that is no longer mine).
+ */
+async function linkedJiraNotReturned(
+  db: SupabaseClient,
+  userId: string,
+  token: TokenSet,
+  meta: Record<string, unknown>,
+  rules: DoneRules,
+  returned: ExternalItem[],
+): Promise<ExternalItem[]> {
+  const { data: links } = await db
+    .from("task_links")
+    .select("external_id, tasks!inner(status)")
+    .eq("user_id", userId)
+    .eq("provider", "jira")
+    .in("tasks.status", ["todo", "doing"]);
+  const seen = new Set(returned.map((i) => i.external_id));
+  const missing = [...new Set((links ?? []).map((l) => String(l.external_id)))]
+    .filter((key) => !seen.has(key))
+    .slice(0, 20);
+  const items: ExternalItem[] = [];
+  for (const key of missing) {
+    const item = await fetchLinkedItem("jira", key, token, meta, rules).catch(
+      () => null,
+    );
+    if (item) items.push(item);
+  }
+  return items;
 }
 
 // --- Sync one user -----------------------------------------------------------
@@ -1315,6 +1391,18 @@ export async function syncUser(
           doneRules(row.done_rules),
           activity,
         );
+      if (provider === "jira") {
+        items.push(
+          ...(await linkedJiraNotReturned(
+            db,
+            userId,
+            token,
+            row.meta ?? {},
+            doneRules(row.done_rules),
+            items,
+          )),
+        );
+      }
       await saveActivity(db, userId, activity);
       if (items.length) {
         const { error } = await db.from("external_items").upsert(
@@ -1362,7 +1450,9 @@ export async function syncUser(
     // One card per linked task (PR ↔ ticket together, two-line summary).
     const cards = await buildCards(db, userId);
     // Tasks changed on the server → wake the app to refresh its data and widgets.
-    if (changed.length > 0 || created > 0 || cards > 0) await queueSilentRefresh(db, userId);
+    if (changed.length > 0 || created > 0 || cards > 0) {
+      await queueSilentRefresh(db, userId);
+    }
   } catch (e) {
     console.error("[sync] link / classify", e);
   }

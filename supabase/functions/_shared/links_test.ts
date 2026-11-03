@@ -1,5 +1,10 @@
 import { assertEquals } from "jsr:@std/assert@1.0.8";
-import { mapStatus, ruleMatches } from "./links.ts";
+import {
+  effectiveStatus,
+  mapStatus,
+  ruleMatches,
+  transition,
+} from "./links.ts";
 
 Deno.test("status map follows README §12", () => {
   assertEquals(mapStatus("github", "pull_request", "merged"), "done");
@@ -145,5 +150,65 @@ Deno.test("reopen reasons are readable", async () => {
       external_id: "x",
     }),
     "Build lỗi lại",
+  );
+});
+
+Deno.test("synced Jira task: unassigned from me → cancelled, assigned back → reopened", () => {
+  const synced = { source: "integration" };
+  const issue = { source: "jira", kind: "issue", status: "todo" };
+  assertEquals(effectiveStatus({ ...issue, role: "assignee" }, synced), "todo");
+  for (const role of ["involved", "reporter", "watcher"]) {
+    assertEquals(effectiveStatus({ ...issue, role }, synced), "unassigned");
+  }
+  // Unassigned → the open task is cancelled.
+  const gone = mapStatus("jira", "issue", "unassigned");
+  assertEquals(gone, "cancelled");
+  assertEquals(transition("todo", "todo", gone, "unassigned"), {
+    status: "cancelled",
+    reopened: false,
+  });
+  assertEquals(transition("doing", "doing", gone, "unassigned"), {
+    status: "cancelled",
+    reopened: false,
+  });
+  // Assigned back → reopened.
+  assertEquals(transition("cancelled", gone, "todo", "todo"), {
+    status: "todo",
+    reopened: true,
+  });
+  // A task the user ticked stays done.
+  assertEquals(transition("done", "todo", gone, "unassigned"), null);
+});
+
+Deno.test("unassigned does not apply to done tickets, own tasks or an unknown role", () => {
+  const issue = { source: "jira", kind: "issue", role: "involved" };
+  // Finished then handed to QA: still done.
+  assertEquals(
+    effectiveStatus({ ...issue, status: "done" }, { source: "integration" }),
+    "done",
+  );
+  // The user's own task that mentions the key.
+  assertEquals(
+    effectiveStatus({ ...issue, status: "todo" }, { source: "manual" }),
+    "todo",
+  );
+  assertEquals(
+    effectiveStatus({ ...issue, status: "todo" }, undefined),
+    "todo",
+  );
+  // Account id unknown: role not set.
+  assertEquals(
+    effectiveStatus({ ...issue, role: null, status: "todo" }, {
+      source: "integration",
+    }),
+    "todo",
+  );
+  // GitHub is unchanged.
+  assertEquals(
+    effectiveStatus(
+      { source: "github", kind: "issue", role: "involved", status: "open" },
+      { source: "integration" },
+    ),
+    "open",
   );
 });
