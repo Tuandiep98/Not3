@@ -69,14 +69,14 @@ private struct WatchTaskRow: View {
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: task.isDone ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(task.isDone ? .orange : .secondary)
+                    .foregroundStyle(task.isDone ? Color.orange : Color.secondary)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(task.title)
                         .strikethrough(task.isDone)
                         .foregroundStyle(task.isDone ? .secondary : .primary)
                         .lineLimit(2)
                     if let detail {
-                        Text(detail).font(.caption2).foregroundStyle(task.reopenedReason == nil ? .secondary : .orange)
+                        Text(detail).font(.caption2).foregroundStyle(task.reopenedReason == nil ? Color.secondary : Color.orange)
                     }
                 }
             }
