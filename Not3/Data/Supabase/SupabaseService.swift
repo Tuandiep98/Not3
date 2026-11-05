@@ -18,8 +18,20 @@ final class SupabaseService {
     private(set) var lastError: String?
     /// True once the server has delivered at least one push to this device. Until then the app keeps
     /// its on-device notifications, so a broken APNs setup (wrong key environment…) never leaves
-    /// the user with no reminders at all.
-    private(set) var hasServerPush = false
+    /// the user with no reminders at all. Remembered across launches: the launch pass schedules
+    /// notifications before the device token is checked, and must not add local copies of pushes
+    /// the server already sends.
+    private(set) var hasServerPush = UserDefaults.standard.bool(forKey: SupabaseService.serverPushKey)
+    private static let serverPushKey = "hasServerPush"
+
+    /// Switches between server push and on-device notifications, cancelling or re-adding the
+    /// local copies so the same reminder never fires twice.
+    private func setServerPush(_ active: Bool) async {
+        guard active != hasServerPush else { return }
+        hasServerPush = active
+        UserDefaults.standard.set(active, forKey: Self.serverPushKey)
+        await NotificationService.serverPushChanged(active: active, in: Persistence.shared.mainContext)
+    }
 
     /// Last full refresh (foreground pass or pull to refresh on "Hôm nay").
     private(set) var lastRefreshAt: Date? = UserDefaults.standard.object(forKey: "lastRefreshAt") as? Date
@@ -49,6 +61,9 @@ final class SupabaseService {
         if let session = try? await client.auth.session {
             userId = session.user.id
             email = session.user.email
+            // The APNs token usually arrives before the session is restored; registerDevice then
+            // skipped it, and the server-push check never ran for this launch.
+            if let token = pendingDeviceToken { await registerDevice(token: token) }
         }
     }
 
@@ -71,10 +86,15 @@ final class SupabaseService {
     }
 
     func signOut() async {
+        // Stop the server pushing this account to the device, or it would ring alongside the
+        // local notifications that come back below.
+        if let token = pendingDeviceToken, userId != nil {
+            try? await client?.from("devices").delete().eq("apns_token", value: token).execute()
+        }
         try? await client?.auth.signOut()
         userId = nil
         email = nil
-        hasServerPush = false
+        await setServerPush(false)
     }
 
     /// Calls the `delete_account` RPC (deletes the auth user + all rows via cascade).
@@ -117,12 +137,8 @@ final class SupabaseService {
                 .limit(1)
                 .execute()
                 .value
-            let delivered = rows.first?.lastSentAt != nil
-            if delivered != hasServerPush {
-                hasServerPush = delivered
-                // The token usually arrives after the launch pass already scheduled local check-ins.
-                await NotificationService.rescheduleCheckIns(in: Persistence.shared.mainContext, serverPushActive: delivered)
-            }
+            // The token usually arrives after the launch pass already scheduled local notifications.
+            await setServerPush(rows.first?.lastSentAt != nil)
         } catch {
             lastError = error.localizedDescription
         }

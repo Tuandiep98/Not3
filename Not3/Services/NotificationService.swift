@@ -223,6 +223,27 @@ enum NotificationService {
         return max(nine, end)
     }
 
+    /// Server push turned on → drop every local check-in / reminder / "Xong chưa?" it duplicates
+    /// (scheduled earlier as a fallback, e.g. before the device token was checked). Turned off →
+    /// put them back for the tasks still to do.
+    static func serverPushChanged(active: Bool, in context: ModelContext) async {
+        await rescheduleCheckIns(in: context, serverPushActive: active)
+        if active {
+            let center = UNUserNotificationCenter.current()
+            let pending = await center.pendingNotificationRequests()
+            center.removePendingNotificationRequests(
+                withIdentifiers: pending.map(\.identifier).filter {
+                    $0.hasPrefix(taskIdPrefix) || $0.hasPrefix(eveningIdPrefix)
+                }
+            )
+        } else {
+            let tasks = (try? context.fetch(FetchDescriptor<TaskItem>())) ?? []
+            for task in tasks where task.plannedAt != nil {
+                await scheduleTaskNotifications(for: task, serverPushActive: false)
+            }
+        }
+    }
+
     /// Local reminder + evening check, only when the server is not already pushing them.
     static func scheduleTaskNotifications(for task: TaskItem, serverPushActive: Bool) async {
         cancelReminder(for: task.id)
