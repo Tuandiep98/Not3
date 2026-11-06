@@ -194,8 +194,16 @@ export async function summarizeCards(
   }
 }
 
-/** Rebuilds the user's cards. Returns how many changed (new, updated or removed). */
-export async function buildCards(db: SupabaseClient, userId: string): Promise<number> {
+/**
+ * Rebuilds the user's cards. Returns how many changed (new, updated or removed).
+ * `useAI = false` (pull to refresh, fast path): rule summaries only. A later call with AI then
+ * upgrades the cards that path just wrote.
+ */
+export async function buildCards(
+  db: SupabaseClient,
+  userId: string,
+  useAI = true,
+): Promise<number> {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
   const [{ data: tasks }, { data: links }, { data: items }, { data: existing }] = await Promise.all([
     db
@@ -210,22 +218,37 @@ export async function buildCards(db: SupabaseClient, userId: string): Promise<nu
       .select("source, external_id, kind, title, url, status, status_name")
       .eq("user_id", userId)
       .in("source", ["github", "jira"]),
-    db.from("cards").select("task_id, version, summary, ai_summary").eq("user_id", userId),
+    db.from("cards").select("task_id, version, summary, ai_summary, updated_at").eq("user_id", userId),
   ]);
 
   const cards = groupCards((tasks ?? []) as TaskRow[], (links ?? []) as LinkRow[], (items ?? []) as ItemRow[]);
   const previous = new Map(
-    ((existing ?? []) as { task_id: string; version: string; summary: string; ai_summary: boolean }[])
+    ((existing ?? []) as {
+      task_id: string;
+      version: string;
+      summary: string;
+      ai_summary: boolean;
+      updated_at: string;
+    }[])
       .map((c) => [c.task_id, c]),
   );
   const changed = cards.filter((c) => previous.get(c.task_id)?.version !== c.version);
+  // Written moments ago by the fast path (rule summary): AI may now replace the summary. Older
+  // rule summaries stay as they are, so a card AI cannot summarize is not retried on every sync.
+  const recent = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const upgrade = useAI
+    ? cards.filter((c) => {
+      const p = previous.get(c.task_id);
+      return c.items.length > 1 && p?.version === c.version && !p.ai_summary && p.updated_at >= recent;
+    })
+    : [];
 
   // AI only where it adds something: cards with more than one item.
-  const needAI = changed.filter((c) => c.items.length > 1);
+  const needAI = useAI ? [...changed.filter((c) => c.items.length > 1), ...upgrade] : [];
   const ai = needAI.length && (await canUseAI(db, userId)) ? await summarizeCards(needAI) : null;
 
   const now = new Date().toISOString();
-  const rows = changed.map((c) => {
+  const rows = [...changed, ...upgrade.filter((c) => ai?.has(c.task_id))].map((c) => {
     const summary = ai?.get(c.task_id);
     return {
       user_id: userId,

@@ -78,7 +78,7 @@ struct SettingsView: View {
                     Button {
                         Task {
                             isSyncingIntegrations = true
-                            await supabase.syncIntegrationsNow(context)
+                            await AppLifecycle.refreshNow()
                             isSyncingIntegrations = false
                         }
                     } label: {

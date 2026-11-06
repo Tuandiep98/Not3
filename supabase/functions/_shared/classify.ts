@@ -153,41 +153,58 @@ export async function classifyAndApply(
     (links ?? []).map((l) => `${l.provider}|${l.external_id}`),
   );
 
-  let created = 0;
-  for (const item of (items ?? []) as ClassifiableItem[]) {
-    const setDecision = (decision: string) =>
-      db.from("external_items").update({ decision })
-        .eq("user_id", userId).eq("source", item.source).eq(
-          "external_id",
-          item.external_id,
-        );
+  // Decisions are collected, then written in a few batched calls (was 1–3 calls per item, one
+  // after another — seconds on a busy day).
+  const decisions = new Map<string, Map<string, string[]>>(); // decision → source → ids
+  const decide = (item: ClassifiableItem, decision: string) => {
+    const bySource = decisions.get(decision) ?? new Map<string, string[]>();
+    bySource.set(item.source, [...(bySource.get(item.source) ?? []), item.external_id]);
+    decisions.set(decision, bySource);
+  };
+  const newTasks: { item: ClassifiableItem; row: Record<string, unknown> }[] = [];
+  const now = new Date().toISOString();
 
+  for (const item of (items ?? []) as ClassifiableItem[]) {
     if (linked.has(`${item.source}|${item.external_id}`)) {
-      await setDecision("task");
+      decide(item, "task");
       continue;
     }
     const result = classify(item, ruleSet);
     if (result.decision === null) continue; // "chưa phân loại" → warning row in the app
-
     if (result.decision === "task") {
-      const taskId = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const { error } = await db.from("tasks").insert({
-        id: taskId,
-        user_id: userId,
-        title: taskTitle(item),
-        chips: ["Công việc"],
-        status: result.status,
-        source: "integration",
-        created_at: now,
-        updated_at: now,
-        updated_by: "sync",
-      });
-      if (error) continue;
-      await db.from("task_links").upsert(
-        {
+      newTasks.push({
+        item,
+        row: {
+          id: crypto.randomUUID(),
           user_id: userId,
-          task_id: taskId,
+          title: taskTitle(item),
+          chips: ["Công việc"],
+          status: result.status,
+          source: "integration",
+          created_at: now,
+          updated_at: now,
+          updated_by: "sync",
+        },
+      });
+      continue; // decided once its task exists
+    }
+    decide(item, result.decision);
+  }
+
+  let created = 0;
+  if (newTasks.length) {
+    const { error } = await db.from("tasks").insert(newTasks.map((t) => t.row));
+    // One bad row fails the batch: fall back to one insert per task, as before.
+    const inserted = error
+      ? (await Promise.all(newTasks.map(async (t) =>
+        (await db.from("tasks").insert(t.row)).error ? null : t
+      ))).filter((t): t is (typeof newTasks)[number] => t !== null)
+      : newTasks;
+    if (inserted.length) {
+      await db.from("task_links").upsert(
+        inserted.map(({ item, row }) => ({
+          user_id: userId,
+          task_id: row.id,
           provider: item.source,
           external_id: item.external_id,
           url: item.url,
@@ -195,12 +212,21 @@ export async function classifyAndApply(
           external_status: item.status,
           link_source: "auto",
           confidence: 1,
-        },
+        })),
         { onConflict: "task_id,provider,external_id", ignoreDuplicates: true },
       );
-      created++;
+      inserted.forEach(({ item }) => decide(item, "task"));
+      created = inserted.length;
     }
-    await setDecision(result.decision);
   }
+
+  await Promise.all(
+    [...decisions].flatMap(([decision, bySource]) =>
+      [...bySource].map(([source, ids]) =>
+        db.from("external_items").update({ decision })
+          .eq("user_id", userId).eq("source", source).in("external_id", ids)
+      )
+    ),
+  );
   return created;
 }

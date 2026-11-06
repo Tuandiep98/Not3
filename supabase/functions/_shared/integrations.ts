@@ -326,49 +326,52 @@ async function githubScanInstalledRepos(
     pushed_at: string | null;
     updated_at: string;
   }[] = [];
-  for (const inst of installations) {
-    const page = await githubGet<{ repositories: typeof repos }>(
+  const pages = await Promise.all(installations.map((inst) =>
+    githubGet<{ repositories: typeof repos }>(
       `/user/installations/${inst.id}/repositories?per_page=100`,
       token,
-    );
-    repos.push(...page.repositories);
-  }
+    )
+  ));
+  for (const page of pages) repos.push(...page.repositories);
   // Only repos with activity today, most recent first; cap API calls.
   const active = repos
     .filter((r) => (r.pushed_at ?? "") >= sinceIso || r.updated_at >= sinceIso)
     .sort((a, b) => (b.pushed_at ?? "").localeCompare(a.pushed_at ?? ""))
     .slice(0, 20);
-  const items: GithubSearchItem[] = [];
-  for (const repo of active) {
-    const list = await githubGet<
-      (GithubSearchItem & { assignees?: { login: string }[] })[]
-    >(
-      `/repos/${repo.full_name}/issues?state=all&since=${
-        encodeURIComponent(
-          sinceIso,
-        )
-      }&per_page=50`,
-      token,
+  const perRepo = await Promise.all(active.map(async (repo) => {
+    const items: GithubSearchItem[] = [];
+    const [list, open] = await Promise.all([
+      githubGet<
+        (GithubSearchItem & { assignees?: { login: string }[] })[]
+      >(
+        `/repos/${repo.full_name}/issues?state=all&since=${
+          encodeURIComponent(
+            sinceIso,
+          )
+        }&per_page=50`,
+        token,
+      ),
+      // PRs from others that ask this user for a review.
+      githubGet<
+        (GithubSearchItem & { requested_reviewers?: { login: string }[] })[]
+      >(`/repos/${repo.full_name}/pulls?state=open&per_page=50`, token).catch(
+        () => [],
+      ),
+    ]);
+    const involvedItems = list.filter((it) =>
+      it.user?.login === login ||
+      it.assignees?.some((a) => a.login === login)
     );
-    for (const it of list) {
-      const involved = it.user?.login === login ||
-        it.assignees?.some((a) => a.login === login);
-      // Pull requests from the issues endpoint lack merged_at: read it from the PR itself.
-      if (it.pull_request && involved) {
+    // Pull requests from the issues endpoint lack merged_at: read it from the PR itself.
+    items.push(
+      ...(await Promise.all(involvedItems.map(async (it) => {
+        if (!it.pull_request) return it;
         const pr = await githubGet<{ merged_at: string | null }>(
           `/repos/${repo.full_name}/pulls/${it.number}`,
           token,
         ).catch(() => ({ merged_at: null }));
-        items.push({ ...it, pull_request: { merged_at: pr.merged_at } });
-      } else if (involved) {
-        items.push(it);
-      }
-    }
-    // PRs from others that ask this user for a review.
-    const open = await githubGet<
-      (GithubSearchItem & { requested_reviewers?: { login: string }[] })[]
-    >(`/repos/${repo.full_name}/pulls?state=open&per_page=50`, token).catch(
-      () => [],
+        return { ...it, pull_request: { merged_at: pr.merged_at } };
+      }))),
     );
     for (const pr of open) {
       if (!pr.requested_reviewers?.some((r) => r.login === login)) continue;
@@ -380,8 +383,9 @@ async function githubScanInstalledRepos(
         review_requested: true,
       });
     }
-  }
-  return items;
+    return items;
+  }));
+  return perRepo.flat();
 }
 
 export type GithubSearchItem = {
@@ -528,7 +532,7 @@ async function markApproved(
         it.pull_request && it.state === "open" && it.user?.login === login,
     )
     .slice(0, 15);
-  for (const it of mine) {
+  await Promise.all(mine.map(async (it) => {
     const path = it.repository_url.split("api.github.com")[1];
     const reviews = await githubGet<
       { state: string; user?: { login: string } }[]
@@ -542,7 +546,7 @@ async function markApproved(
     }
     it.approved = [...latest.values()].includes("APPROVED") &&
       ![...latest.values()].includes("CHANGES_REQUESTED");
-  }
+  }));
 }
 
 /** html_urls of open PRs where a review is requested from the user (search; scan as fallback). */
@@ -550,39 +554,28 @@ async function githubReviewRequests(
   token: TokenSet,
   login: string,
   candidates: GithubSearchItem[],
+  /** The `review-requested:` search, already started by the caller (null = refused). */
+  searched: Promise<Set<string> | null>,
 ): Promise<Set<string>> {
-  try {
-    const r = await githubGet<{ items: GithubSearchItem[] }>(
-      `/search/issues?q=${
-        encodeURIComponent(
-          `is:pr is:open review-requested:${login}`,
-        )
-      }&per_page=50`,
+  const found = await searched;
+  if (found) return found;
+  // Search refused: ask each open PR we already have that is not the user's own (in parallel).
+  const open = candidates
+    .filter(
+      (c) => c.pull_request && c.state === "open" && c.user?.login !== login,
+    )
+    .slice(0, 20);
+  const hits = await Promise.all(open.map(async (it) => {
+    const path = it.repository_url.split("api.github.com")[1];
+    const pr = await githubGet<{ requested_reviewers?: { login: string }[] }>(
+      `${path}/pulls/${it.number}`,
       token,
-    );
-    return new Set(r.items.map((i) => i.html_url));
-  } catch {
-    // Search refused: ask each open PR we already have that is not the user's own.
-    const urls = new Set<string>();
-    for (
-      const it of candidates
-        .filter(
-          (c) =>
-            c.pull_request && c.state === "open" && c.user?.login !== login,
-        )
-        .slice(0, 20)
-    ) {
-      const path = it.repository_url.split("api.github.com")[1];
-      const pr = await githubGet<{ requested_reviewers?: { login: string }[] }>(
-        `${path}/pulls/${it.number}`,
-        token,
-      ).catch(() => null);
-      if (pr?.requested_reviewers?.some((r) => r.login === login)) {
-        urls.add(it.html_url);
-      }
-    }
-    return urls;
-  }
+    ).catch(() => null);
+    return pr?.requested_reviewers?.some((r) => r.login === login)
+      ? it.html_url
+      : null;
+  }));
+  return new Set(hits.filter((u): u is string => u !== null));
 }
 
 async function searchUrls(
@@ -619,29 +612,76 @@ export async function fetchGithub(
   const day = sinceIso.slice(0, 10);
   const items: ExternalItem[] = [];
 
+  // Every independent GitHub call starts at once (pull to refresh waits for the slowest one,
+  // not for the sum of them all).
+  const wantPrs = settings.prs || settings.review_requests ||
+    settings.reviews_submitted;
+  const needEvents = settings.commits ||
+    settings.releases ||
+    settings.merges ||
+    settings.comments ||
+    settings.mentions ||
+    settings.builds ||
+    settings.deploys;
+  const touchedP = wantPrs
+    ? githubTouchedToday(token, login, sinceIso)
+    : Promise.resolve([] as GithubSearchItem[]);
+  const reviewSearchP = wantPrs && settings.review_requests
+    ? searchUrls(token, `is:pr is:open review-requested:${login}`)
+    : Promise.resolve(null);
+  const reviewedP = wantPrs && settings.reviews_submitted
+    ? searchUrls(token, `is:pr reviewed-by:${login} updated:>=${day}`)
+    : Promise.resolve(null);
+  const eventsP = needEvents || activity
+    ? githubGet<GithubEvent[]>(
+      `/users/${login}/events?per_page=100`,
+      token,
+    ).catch((e) => {
+      console.warn(
+        "[github] events unavailable:",
+        e instanceof Error ? e.message : e,
+      );
+      return [] as GithubEvent[];
+    })
+    : Promise.resolve([] as GithubEvent[]);
+  const mentionedP = settings.mentions
+    ? githubGet<{ items: GithubSearchItem[] }>(
+      `/search/issues?q=${
+        encodeURIComponent(
+          `mentions:${login} updated:>=${day}`,
+        )
+      }&per_page=30`,
+      token,
+    )
+      .then((r) => r.items)
+      .catch(() => [] as GithubSearchItem[])
+    : Promise.resolve([] as GithubSearchItem[]);
+  // A failed PR search fails the sync, as before; the others are awaited below. Keep them from
+  // being reported as unhandled rejections if we bail out first.
+  for (const p of [reviewSearchP, reviewedP, eventsP, mentionedP]) {
+    p.catch(() => {});
+  }
+
   // --- PRs / issues (+ review requests, reviews sent) ---
-  if (settings.prs || settings.review_requests || settings.reviews_submitted) {
-    const touched = await githubTouchedToday(token, login, sinceIso);
+  if (wantPrs) {
+    const touched = await touchedP;
     const unique = [
       ...new Map(touched.map((it) => [it.html_url, it])).values(),
     ];
-    if (settings.review_requests) {
-      const pending = await githubReviewRequests(token, login, unique);
-      for (const it of unique) {
-        it.review_requested = it.review_requested || pending.has(it.html_url);
-      }
-    } else {
-      for (const it of unique) it.review_requested = false;
+    const [pending, reviewedSet] = await Promise.all([
+      settings.review_requests
+        ? githubReviewRequests(token, login, unique, reviewSearchP)
+        : Promise.resolve(new Set<string>()),
+      reviewedP,
+      rules.pr_done_when === "approved"
+        ? markApproved(token, login, unique)
+        : Promise.resolve(),
+    ]);
+    for (const it of unique) {
+      it.review_requested = settings.review_requests &&
+        (it.review_requested || pending.has(it.html_url));
     }
-    if (rules.pr_done_when === "approved") {
-      await markApproved(token, login, unique);
-    }
-    const reviewed = settings.reviews_submitted
-      ? ((await searchUrls(
-        token,
-        `is:pr reviewed-by:${login} updated:>=${day}`,
-      )) ?? new Set<string>())
-      : new Set<string>();
+    const reviewed = reviewedSet ?? new Set<string>();
     for (const it of unique) {
       const item = githubItem(it, login, reviewed.has(it.html_url), rules);
       const isReview = item.status === "review_requested" ||
@@ -659,25 +699,7 @@ export async function fetchGithub(
   }
 
   // --- Events feed: commits, releases & tags, merges, comments (one call) ---
-  const needEvents = settings.commits ||
-    settings.releases ||
-    settings.merges ||
-    settings.comments ||
-    settings.mentions ||
-    settings.builds ||
-    settings.deploys;
-  const events = needEvents || activity
-    ? await githubGet<GithubEvent[]>(
-      `/users/${login}/events?per_page=100`,
-      token,
-    ).catch((e) => {
-      console.warn(
-        "[github] events unavailable:",
-        e instanceof Error ? e.message : e,
-      );
-      return [] as GithubEvent[];
-    })
-    : [];
+  const events = await eventsP;
   // Every event of the feed (up to 100, recent days too): timestamps for "Tổng kết tuần".
   activity?.push(...githubActivity(events as unknown as GithubActivityEvent[]));
   const today = needEvents
@@ -696,16 +718,7 @@ export async function fetchGithub(
 
   // --- Mentions → "Trả lời …" task, done once I comment there ---
   if (settings.mentions) {
-    const mentioned = await githubGet<{ items: GithubSearchItem[] }>(
-      `/search/issues?q=${
-        encodeURIComponent(
-          `mentions:${login} updated:>=${day}`,
-        )
-      }&per_page=30`,
-      token,
-    )
-      .then((r) => r.items)
-      .catch(() => [] as GithubSearchItem[]);
+    const mentioned = await mentionedP;
     const known = new Set(items.map((i) => i.external_id));
     for (const it of mentioned) {
       if (known.has(it.html_url) || it.user?.login === login) continue;
@@ -736,14 +749,18 @@ export async function fetchGithub(
         ...items.map((i) => i.scope ?? "").filter((r) => r.includes("/")),
       ]),
     ].slice(0, 10);
-    for (const full of repos) {
-      if (settings.builds) {
-        items.push(...(await githubBuilds(token, login, full, sinceIso, day)));
-      }
-      if (settings.deploys) {
-        items.push(...(await githubDeploys(token, login, full, sinceIso)));
-      }
-    }
+    const perRepo = await Promise.all(repos.map(async (full) => {
+      const [builds, deploys] = await Promise.all([
+        settings.builds
+          ? githubBuilds(token, login, full, sinceIso, day)
+          : Promise.resolve([]),
+        settings.deploys
+          ? githubDeploys(token, login, full, sinceIso)
+          : Promise.resolve([]),
+      ]);
+      return [...builds, ...deploys];
+    }));
+    items.push(...perRepo.flat());
   }
   return items;
 }
@@ -975,8 +992,7 @@ async function githubDeploys(
   const mine = list
     .filter((d) => d.created_at >= sinceIso && d.creator?.login === login)
     .slice(0, 10);
-  const items: ExternalItem[] = [];
-  for (const d of mine) {
+  return await Promise.all(mine.map(async (d): Promise<ExternalItem> => {
     const [latest] = await githubGet<
       {
         state: string;
@@ -994,7 +1010,7 @@ async function githubDeploys(
       : state === "failure" || state === "error"
       ? "failed"
       : "running";
-    items.push({
+    return {
       source: "github",
       external_id: `deploy:${full}:${d.id}`,
       kind: "deploy",
@@ -1008,9 +1024,8 @@ async function githubDeploys(
       occurred_at: latest?.created_at ?? d.created_at,
       role: "author",
       scope: full,
-    });
-  }
-  return items;
+    };
+  }));
 }
 
 // --- Jira --------------------------------------------------------------------
@@ -1104,14 +1119,46 @@ export async function fetchJira(
   const day = new Date().toISOString().slice(0, 10);
   const items: ExternalItem[] = [];
 
+  // The three searches are independent: start them together.
   const jql = jiraIssuesJql(settings);
-  if (jql) {
-    const issues = await jiraSearch(
+  const issuesP = jql
+    ? jiraSearch(cloudId, token, jql, "summary,status,updated,assignee,reporter")
+    : Promise.resolve([] as JiraIssue[]);
+  // Optional journal sources must never break the main sync.
+  const changedP = settings.transitions
+    ? jiraSearch(
       cloudId,
       token,
-      jql,
-      "summary,status,updated,assignee,reporter",
-    );
+      "status CHANGED BY currentUser() AFTER startOfDay()",
+      "summary,status,updated",
+    ).catch(() => [] as JiraIssue[])
+    : Promise.resolve([] as JiraIssue[]);
+  const wantLogs = Boolean(me && (activity || settings.worklogs));
+  // My work logs (last 2 days, so a log added late for yesterday is still picked up).
+  const logsP = wantLogs
+    ? jiraSearch(
+      cloudId,
+      token,
+      "worklogAuthor = currentUser() AND worklogDate >= -2d",
+      "summary",
+    )
+      .catch(() => [] as JiraIssue[])
+      .then((recent) =>
+        jiraMyWorklogs(
+          cloudId,
+          token.access_token,
+          me,
+          recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
+          new Date(Date.now() - 3 * 86_400_000),
+        )
+      )
+    : Promise.resolve([]);
+  // The main search failing fails the sync (as before); keep the others from going unhandled.
+  changedP.catch(() => {});
+  logsP.catch(() => {});
+
+  if (jql) {
+    const issues = await issuesP;
     items.push(
       ...issues.map((issue) => {
         const item = jiraItem(issue, site, me, rules);
@@ -1123,14 +1170,8 @@ export async function fetchJira(
       }),
     );
   }
-  // Optional journal sources must never break the main sync.
   if (settings.transitions) {
-    const changed = await jiraSearch(
-      cloudId,
-      token,
-      "status CHANGED BY currentUser() AFTER startOfDay()",
-      "summary,status,updated",
-    ).catch(() => [] as JiraIssue[]);
+    const changed = await changedP;
     items.push(
       ...changed.map((issue) => ({
         source: "jira" as const,
@@ -1148,22 +1189,9 @@ export async function fetchJira(
       })),
     );
   }
-  // My work logs (last 2 days, so a log added late for yesterday is still picked up):
-  // real time spent for "Tổng kết tuần", and today's ones as journal lines with their duration.
-  if (me && (activity || settings.worklogs)) {
-    const recent = await jiraSearch(
-      cloudId,
-      token,
-      "worklogAuthor = currentUser() AND worklogDate >= -2d",
-      "summary",
-    ).catch(() => [] as JiraIssue[]);
-    const logs = await jiraMyWorklogs(
-      cloudId,
-      token.access_token,
-      me,
-      recent.map((i) => ({ key: i.key, summary: i.fields.summary })),
-      new Date(Date.now() - 3 * 86_400_000),
-    );
+  // Real time spent for "Tổng kết tuần", and today's logs as journal lines with their duration.
+  if (wantLogs) {
+    const logs = await logsP;
     activity?.push(
       ...logs.flatMap(({ issue, log }) => worklogRows([log], me, issue)),
     );
@@ -1364,14 +1392,12 @@ async function linkedJiraNotReturned(
   const missing = [...new Set((links ?? []).map((l) => String(l.external_id)))]
     .filter((key) => !seen.has(key))
     .slice(0, 20);
-  const items: ExternalItem[] = [];
-  for (const key of missing) {
-    const item = await fetchLinkedItem("jira", key, token, meta, rules).catch(
-      () => null,
-    );
-    if (item) items.push(item);
-  }
-  return items;
+  const items = await Promise.all(
+    missing.map((key) =>
+      fetchLinkedItem("jira", key, token, meta, rules).catch(() => null)
+    ),
+  );
+  return items.filter((i): i is ExternalItem => i !== null);
 }
 
 // --- Sync one user -----------------------------------------------------------
@@ -1381,6 +1407,12 @@ export async function syncUser(
   userId: string,
   timezone: string,
   only?: Provider,
+  /**
+   * Pull to refresh: the caller answers as soon as tasks are linked and classified, and hands the
+   * slow tail (AI link matching, card summaries, Jira webhook upkeep) to this, to finish in the
+   * background. That tail ends with a silent push, so the app picks up its result.
+   */
+  background?: (work: Promise<unknown>) => void,
 ): Promise<Record<Provider, number | string>> {
   let query = db
     .from("integrations")
@@ -1390,7 +1422,9 @@ export async function syncUser(
   const { data: rows } = await query;
   const result = {} as Record<Provider, number | string>;
   const sinceIso = startOfLocalDay(timezone).toISOString();
-  for (const row of rows ?? []) {
+  const webhookUpkeep: (() => Promise<void>)[] = [];
+  // GitHub and Jira at the same time.
+  await Promise.all((rows ?? []).map(async (row) => {
     const provider = row.provider as Provider;
     const activity: ActivityRow[] = [];
     try {
@@ -1445,12 +1479,14 @@ export async function syncUser(
       if (provider === "jira") {
         // Near real-time updates: register / refresh the Jira webhook (never throws).
         const meta = row.meta ?? {};
-        await ensureJiraWebhook(
-          db,
-          userId,
-          token,
-          meta,
-          () => jiraAccountId(token, meta),
+        webhookUpkeep.push(() =>
+          ensureJiraWebhook(
+            db,
+            userId,
+            token,
+            meta,
+            () => jiraAccountId(token, meta),
+          )
         );
       }
     } catch (e) {
@@ -1462,21 +1498,47 @@ export async function syncUser(
         .eq("provider", provider);
       result[provider] = message;
     }
-  }
-  // Link tasks to what was just pulled and apply external status (PR merged → task done).
-  try {
-    const changed = await linkAndSync(db, userId);
-    // Then classify what is left: tasks / journal / ignored / "chưa phân loại".
-    const created = await classifyAndApply(db, userId);
-    // One card per linked task (PR ↔ ticket together, two-line summary).
-    const cards = await buildCards(db, userId);
-    // Tasks changed on the server → wake the app to refresh its data and widgets.
-    if (changed.length > 0 || created > 0 || cards > 0) {
-      await queueSilentRefresh(db, userId);
+  }));
+
+  if (!background) {
+    await Promise.all(webhookUpkeep.map((run) => run()));
+    // Link tasks to what was just pulled and apply external status (PR merged → task done).
+    try {
+      const changed = await linkAndSync(db, userId);
+      // Then classify what is left: tasks / journal / ignored / "chưa phân loại".
+      const created = await classifyAndApply(db, userId);
+      // One card per linked task (PR ↔ ticket together, two-line summary).
+      const cards = await buildCards(db, userId);
+      // Tasks changed on the server → wake the app to refresh its data and widgets.
+      if (changed.length > 0 || created > 0 || cards > 0) {
+        await queueSilentRefresh(db, userId);
+      }
+    } catch (e) {
+      console.error("[sync] link / classify", e);
     }
+    return result;
+  }
+
+  // Fast path: links + status changes, classification, cards with rule summaries — what the app
+  // shows right away. Link matching asks AI only when something is new (links.ts), and it must
+  // run before classification, or an item AI would link to my task gets a second task.
+  try {
+    await linkAndSync(db, userId);
+    await classifyAndApply(db, userId);
+    await buildCards(db, userId, false);
   } catch (e) {
     console.error("[sync] link / classify", e);
   }
+  background((async () => {
+    try {
+      await Promise.all(webhookUpkeep.map((run) => run()));
+      // AI summaries for the cards just written; a silent push brings them to the app.
+      const cards = await buildCards(db, userId);
+      if (cards > 0) await queueSilentRefresh(db, userId);
+    } catch (e) {
+      console.error("[sync] background", e);
+    }
+  })());
   return result;
 }
 

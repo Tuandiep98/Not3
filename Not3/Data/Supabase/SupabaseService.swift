@@ -389,8 +389,9 @@ final class SupabaseService {
         await refreshIntegrations()
     }
 
-    /// "Đồng bộ ngay": server pulls GitHub/Jira, then the app pulls today's items.
-    /// Returns what went wrong, in the user's words ("Jira: Cần đăng nhập lại"), or nil.
+    /// "Đồng bộ ngay": server pulls GitHub/Jira. The caller then pulls the results
+    /// (`AppLifecycle.pullServer`). Returns what went wrong, in the user's words
+    /// ("Jira: Cần đăng nhập lại"), or nil.
     @discardableResult
     func syncIntegrationsNow(_ context: ModelContext) async -> String? {
         guard let client, userId != nil else { return nil }
@@ -409,8 +410,6 @@ final class SupabaseService {
             lastError = error.localizedDescription
             problem = "Không kết nối được máy chủ"
         }
-        await pullExternalItems(context)
-        await refreshIntegrations()
         return problem
     }
 
@@ -702,6 +701,7 @@ final class SupabaseService {
             task.linkSuggestionTitle = nil
             if accept {
                 await syncIntegrationsNow(context)   // apply the linked item's status right away
+                await pullExternalItems(context)
                 await pullTaskUpdates(context)
                 await pullLinks(context)
             }

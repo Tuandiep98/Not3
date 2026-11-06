@@ -113,8 +113,9 @@ export async function jiraMyWorklogs(
   issues: JiraIssueRef[],
   since: Date,
 ): Promise<{ issue: JiraIssueRef; log: JiraWorklog }[]> {
-  const out: { issue: JiraIssueRef; log: JiraWorklog }[] = [];
-  for (const issue of issues.slice(0, 20)) {
+  // One request per issue, all at once (was one after another).
+  const perIssue = await Promise.all(issues.slice(0, 20).map(async (issue) => {
+    const out: { issue: JiraIssueRef; log: JiraWorklog }[] = [];
     const res = await fetch(
       `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/issue/${issue.key}/worklog?startedAfter=${since.getTime()}&maxResults=100`,
       {
@@ -124,7 +125,7 @@ export async function jiraMyWorklogs(
         },
       },
     ).catch(() => null);
-    if (!res?.ok) continue;
+    if (!res?.ok) return out;
     const data = (await res.json().catch(() => ({}))) as {
       worklogs?: JiraWorklog[];
     };
@@ -133,8 +134,9 @@ export async function jiraMyWorklogs(
         out.push({ issue, log });
       }
     }
-  }
-  return out;
+    return out;
+  }));
+  return perIssue.flat();
 }
 
 /** Plain text of an Atlassian Document Format value (a work log comment); "" when empty. */

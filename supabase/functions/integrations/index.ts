@@ -83,6 +83,14 @@ Deno.serve(async (req) => {
     return json({ url: authorizeUrl(provider, state) });
   }
 
-  const result = await syncUser(db, user.id, body.timezone);
+  // Pull to refresh waits on this: answer once the tasks are ready, finish the slow tail (AI card
+  // summaries, Jira webhook upkeep) after the response.
+  const result = await syncUser(db, user.id, body.timezone, undefined, runAfterResponse);
   return json({ result });
 });
+
+declare const EdgeRuntime: { waitUntil(work: Promise<unknown>): void } | undefined;
+
+function runAfterResponse(work: Promise<unknown>) {
+  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(work);
+}

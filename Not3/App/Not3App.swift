@@ -84,22 +84,12 @@ enum AppLifecycle {
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
         await NotificationService.rescheduleShutdown(in: context)
-        await CalendarService.shared.refresh(in: context)
-        // Lời nhắc / Sức khỏe, when turned on (on device only).
-        await LocalModule.refreshAll(in: context)
+        await refreshLocalSources()
         // Today's occurrences of repeating tasks, before they sync.
         await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)
-        await supabase.uploadCalendarItems(context)
-        await supabase.pullContentRules()
-        await supabase.pullExternalItems(context)
-        await supabase.pullTaskUpdates(context)
-        await supabase.pullLinks(context)
-        await supabase.pullCards(context)
-        await supabase.pullNoteSuggestions(context)
-        JournalService.updateToday(in: context)
-        supabase.markRefreshed()
-        WidgetBridge.publish()
+        await pullServer(includeNoteSuggestions: true)
+        finishPass()
     }
 
     /// BGAppRefreshTask and silent pushes: same data pass, no UI work, then the widgets.
@@ -108,20 +98,43 @@ enum AppLifecycle {
         let supabase = SupabaseService.shared
         if !supabase.isSignedIn { await supabase.restoreSession() }
         await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
-        await CalendarService.shared.refresh(in: context)
-        // Lời nhắc / Sức khỏe, when turned on (on device only).
-        await LocalModule.refreshAll(in: context)
+        await refreshLocalSources()
         // Today's occurrences of repeating tasks, before they sync.
         await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
         await supabase.syncPending(context)
-        await supabase.uploadCalendarItems(context)
-        await supabase.pullContentRules()
-        await supabase.pullExternalItems(context)
-        await supabase.pullTaskUpdates(context)
-        await supabase.pullLinks(context)
-        await supabase.pullCards(context)
-        JournalService.updateToday(in: context)
-        supabase.markRefreshed()
+        await pullServer(includeNoteSuggestions: false)
+        finishPass()
+    }
+
+    /// Calendar, then Lời nhắc / Sức khỏe when turned on (all on device).
+    private static func refreshLocalSources() async {
+        let context = Persistence.shared.mainContext
+        await CalendarService.shared.refresh(in: context)
+        await LocalModule.refreshAll(in: context)
+    }
+
+    /// Supabase reads in two parallel rounds instead of one request after another. Round 2 reads
+    /// the tasks round 1 may have added (tasks the server created from GitHub / Jira).
+    /// Every child runs on the main actor: they overlap only while waiting on the network.
+    private static func pullServer(includeNoteSuggestions: Bool) async {
+        await withDiscardingTaskGroup { group in
+            group.addTask { @MainActor in await SupabaseService.shared.pullExternalItems(Persistence.shared.mainContext) }
+            group.addTask { @MainActor in await SupabaseService.shared.pullTaskUpdates(Persistence.shared.mainContext) }
+            group.addTask { @MainActor in await SupabaseService.shared.pullContentRules() }
+            group.addTask { @MainActor in await SupabaseService.shared.uploadCalendarItems(Persistence.shared.mainContext) }
+            if includeNoteSuggestions {
+                group.addTask { @MainActor in await SupabaseService.shared.pullNoteSuggestions(Persistence.shared.mainContext) }
+            }
+        }
+        await withDiscardingTaskGroup { group in
+            group.addTask { @MainActor in await SupabaseService.shared.pullLinks(Persistence.shared.mainContext) }
+            group.addTask { @MainActor in await SupabaseService.shared.pullCards(Persistence.shared.mainContext) }
+        }
+    }
+
+    private static func finishPass() {
+        JournalService.updateToday(in: Persistence.shared.mainContext)
+        SupabaseService.shared.markRefreshed()
         WidgetBridge.publish()
     }
 
@@ -157,13 +170,43 @@ enum AppLifecycle {
     }
     #endif
 
-    /// Pull to refresh on "Hôm nay": ask the server to pull GitHub / Jira first, then the usual pass.
+    /// Pull to refresh on "Hôm nay": GitHub / Jira first. The spinner waits only for what the list
+    /// shows; the rest (notification schedule, note chips, Settings status) runs after it.
     /// Returns what could not be synced ("Jira: Cần đăng nhập lại"), or nil.
     @discardableResult
     static func refreshNow() async -> String? {
         let context = Persistence.shared.mainContext
-        let problem = await SupabaseService.shared.syncIntegrationsNow(context)
-        await onForeground()
+        let supabase = SupabaseService.shared
+        await WidgetBridge.applyPendingActions(serverPushActive: supabase.hasServerPush)
+        await RecurrenceService.generate(in: context, serverPushActive: supabase.hasServerPush)
+        // Local edits up first: the server links and classifies against these tasks.
+        await supabase.syncPending(context)
+        // The server pulls GitHub / Jira while this device reads Calendar / Lời nhắc / Sức khỏe.
+        let problem = await withTaskGroup(of: String?.self) { group in
+            group.addTask { @MainActor in
+                await SupabaseService.shared.syncIntegrationsNow(Persistence.shared.mainContext)
+            }
+            group.addTask { @MainActor in
+                await AppLifecycle.refreshLocalSources()
+                return nil
+            }
+            var problem: String?
+            for await case let found? in group { problem = found }
+            return problem
+        }
+        await pullServer(includeNoteSuggestions: false)
+        finishPass()
+
+        Task { @MainActor in
+            let context = Persistence.shared.mainContext
+            let supabase = SupabaseService.shared
+            await NotificationService.rescheduleCheckIns(in: context, serverPushActive: supabase.hasServerPush)
+            await NotificationService.rescheduleShutdown(in: context)
+            // Changes the Calendar read made to tasks (moved / deleted events) go up now.
+            await supabase.syncPending(context)
+            await supabase.pullNoteSuggestions(context)
+            await supabase.refreshIntegrations()
+        }
         return problem
     }
 }

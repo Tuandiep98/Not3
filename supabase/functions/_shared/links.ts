@@ -90,6 +90,7 @@ export function ruleMatches(
   });
 }
 
+/** AI matches; null when the call failed (so the same input is tried again next time). */
 async function aiMatches(tasks: TaskRow[], items: ExternalRow[]) {
   const schema = z.object({
     links: z
@@ -129,8 +130,18 @@ async function aiMatches(tasks: TaskRow[], items: ExternalRow[]) {
     );
   } catch (e) {
     if (!(e instanceof AIUnavailable)) console.error("[links] ai", e);
-    return [];
+    return null;
   }
+}
+
+/** Same tasks and items as the last AI attempt → the answer would be the same: skip the call. */
+async function aiInputKey(tasks: TaskRow[], items: ExternalRow[]): Promise<string> {
+  const text = JSON.stringify([
+    tasks.map((t) => `${t.id}|${t.title}`).sort(),
+    items.map((i) => `${i.source}|${i.external_id}`).sort(),
+  ]);
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /** Creates new links, then applies external status changes to linked tasks. Returns changed task ids. */
@@ -183,19 +194,28 @@ export async function linkAndSync(
     }
   }
   const candidates = external.filter((i) => i.kind !== "commits");
-  if (
-    stillUnlinked.length &&
-    candidates.length &&
-    (await canUseAI(db, userId))
-  ) {
+  const aiTasks = stillUnlinked.slice(0, 15);
+  const aiItems = candidates.slice(0, 30);
+  // Every sync used to ask AI again about the same personal tasks that match nothing (seconds
+  // on each pull to refresh). Ask only when a task or an item is new since the last answer.
+  let aiKey: string | null = null;
+  if (aiTasks.length && aiItems.length) {
+    aiKey = await aiInputKey(aiTasks, aiItems);
+    const { data: profile } = await db
+      .from("profiles")
+      .select("link_ai_key")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (profile?.link_ai_key === aiKey) aiKey = null;
+  }
+  const matches = aiKey && (await canUseAI(db, userId))
+    ? await aiMatches(aiTasks, aiItems)
+    : null;
+  if (matches) {
+    await db.from("profiles").update({ link_ai_key: aiKey }).eq("user_id", userId);
     const byId = new Map(candidates.map((i) => [i.external_id, i]));
     const suggestions: Record<string, unknown>[] = [];
-    for (
-      const m of await aiMatches(
-        stillUnlinked.slice(0, 15),
-        candidates.slice(0, 30),
-      )
-    ) {
+    for (const m of matches) {
       const item = byId.get(m.external_id)!;
       if (m.confidence >= AUTO_LINK) {
         newLinks.push(linkRow(userId, m.task_id, item, "ai", m.confidence));
