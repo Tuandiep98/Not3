@@ -115,21 +115,27 @@ enum AppLifecycle {
 
     /// Supabase reads in two parallel rounds instead of one request after another. Round 2 reads
     /// the tasks round 1 may have added (tasks the server created from GitHub / Jira).
-    /// Every child runs on the main actor: they overlap only while waiting on the network.
+    /// Every job runs on the main actor (each `Task` inherits it): they overlap only while waiting
+    /// on the network. Plain tasks, not a task group: @MainActor children in a group trip the
+    /// Swift 6 region checker ("Pattern that the region-based isolation checker does not understand").
     private static func pullServer(includeNoteSuggestions: Bool) async {
-        await withDiscardingTaskGroup { group in
-            group.addTask { @MainActor in await SupabaseService.shared.pullExternalItems(Persistence.shared.mainContext) }
-            group.addTask { @MainActor in await SupabaseService.shared.pullTaskUpdates(Persistence.shared.mainContext) }
-            group.addTask { @MainActor in await SupabaseService.shared.pullContentRules() }
-            group.addTask { @MainActor in await SupabaseService.shared.uploadCalendarItems(Persistence.shared.mainContext) }
-            if includeNoteSuggestions {
-                group.addTask { @MainActor in await SupabaseService.shared.pullNoteSuggestions(Persistence.shared.mainContext) }
-            }
-        }
-        await withDiscardingTaskGroup { group in
-            group.addTask { @MainActor in await SupabaseService.shared.pullLinks(Persistence.shared.mainContext) }
-            group.addTask { @MainActor in await SupabaseService.shared.pullCards(Persistence.shared.mainContext) }
-        }
+        let externalItems = Task { await SupabaseService.shared.pullExternalItems(Persistence.shared.mainContext) }
+        let taskUpdates = Task { await SupabaseService.shared.pullTaskUpdates(Persistence.shared.mainContext) }
+        let contentRules = Task { await SupabaseService.shared.pullContentRules() }
+        let calendar = Task { await SupabaseService.shared.uploadCalendarItems(Persistence.shared.mainContext) }
+        let notes: Task<Void, Never>? = includeNoteSuggestions
+            ? Task { await SupabaseService.shared.pullNoteSuggestions(Persistence.shared.mainContext) }
+            : nil
+        await externalItems.value
+        await taskUpdates.value
+        await contentRules.value
+        await calendar.value
+        await notes?.value
+
+        let links = Task { await SupabaseService.shared.pullLinks(Persistence.shared.mainContext) }
+        let cards = Task { await SupabaseService.shared.pullCards(Persistence.shared.mainContext) }
+        await links.value
+        await cards.value
     }
 
     private static func finishPass() {
@@ -182,18 +188,10 @@ enum AppLifecycle {
         // Local edits up first: the server links and classifies against these tasks.
         await supabase.syncPending(context)
         // The server pulls GitHub / Jira while this device reads Calendar / Lời nhắc / Sức khỏe.
-        let problem = await withTaskGroup(of: String?.self) { group in
-            group.addTask { @MainActor in
-                await SupabaseService.shared.syncIntegrationsNow(Persistence.shared.mainContext)
-            }
-            group.addTask { @MainActor in
-                await AppLifecycle.refreshLocalSources()
-                return nil
-            }
-            var problem: String?
-            for await case let found? in group { problem = found }
-            return problem
-        }
+        let integrations = Task { await SupabaseService.shared.syncIntegrationsNow(Persistence.shared.mainContext) }
+        let localSources = Task { await refreshLocalSources() }
+        let problem = await integrations.value
+        await localSources.value
         await pullServer(includeNoteSuggestions: false)
         finishPass()
 
